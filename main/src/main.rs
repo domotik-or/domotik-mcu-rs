@@ -12,6 +12,7 @@ use embassy_stm32::{
     dma,
     exti::{self, ExtiInput},
     gpio::{Level, Output, Pull, Speed},
+    i2c::{self, I2c},
     interrupt,
     mode::Async,
     peripherals::{self, USART1},
@@ -24,15 +25,22 @@ use {defmt_rtt as _, panic_probe as _};
 use heapless::Vec;
 use static_cell::StaticCell;
 
+mod ethernet;
 mod ring;
 mod serial;
-mod ethernet;
+mod sensor;
 
 bind_interrupts!(struct Irqs {
     // Ethernet
     EXTI0 => exti::InterruptHandler<interrupt::typelevel::EXTI0>;
     DMA2_STREAM0 => dma::InterruptHandler<peripherals::DMA2_CH0>;
     DMA2_STREAM3 => dma::InterruptHandler<peripherals::DMA2_CH3>;
+
+    // I2c
+    I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
+    I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
+    DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
+    DMA1_STREAM6 => dma::InterruptHandler<peripherals::DMA1_CH6>;
 
     // Serial
     USART1 => usart::BufferedInterruptHandler<USART1>;
@@ -121,6 +129,9 @@ async fn main(spawner: Spawner) {
 
     info!("Network task initialized");
 
+    // I2c
+    let i2c = I2c::new(p.I2C1, p.PB8, p.PB7, p.DMA1_CH6, p.DMA1_CH0, Irqs, Default::default());
+
     // Usart
     let mut config = UsartConfig::default();
     // set Linky serial line configuration
@@ -142,8 +153,9 @@ async fn main(spawner: Spawner) {
 
     // Spawn tasks
     spawner.spawn(ethernet::task(stack).unwrap());
-    spawner.spawn(serial::task(buf_usart).unwrap());
     spawner.spawn(ring::task(p.PB2, p.PB3, p.EXTI2).unwrap());
+    spawner.spawn(serial::task(buf_usart).unwrap());
+    spawner.spawn(sensor::task(i2c).unwrap());
 
     loop {
         Timer::after_millis(500).await;
