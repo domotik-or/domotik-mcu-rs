@@ -1,10 +1,10 @@
 [package]
-name = "stm32f4"
+name = "stm32h5"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-embassy-stm32 = { version = "0.6.0", features = ["defmt", "stm32f401re", "unstable-pac", "memory-x", "time-driver-tim4", "exti", "chrono"] }
+embassy-stm32 = { version = "0.6.0", features = ["defmt", "stm32h523cc", "unstable-pac", "memory-x", "time-driver-tim4", "exti", "chrono"] }
 embassy-sync = { version = "0.8.0", features = ["defmt"] }
 embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
 embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }

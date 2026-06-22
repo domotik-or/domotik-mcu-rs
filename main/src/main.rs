@@ -8,14 +8,18 @@ use embassy_net::{Ipv4Address, Ipv4Cidr, StackResources};
 use embassy_net_wiznet::{chip::W5500, Device, Runner, State};
 use embassy_stm32::{
     bind_interrupts,
+    can::{
+        CanConfigurator, IT0InterruptHandler, IT1InterruptHandler,
+    },
     Config,
-    dma,
+    dma::{InterruptHandler as DmaInterruptHandler},
     exti::{self, ExtiInput},
     gpio::{Level, Output, Pull, Speed},
     i2c::{self, I2c},
     interrupt,
     mode::Async,
-    peripherals::{self, USART1},
+    peripherals::{FDCAN1, GPDMA1_CH0, GPDMA1_CH6, GPDMA2_CH0, GPDMA2_CH3, I2C1, USART1},
+    rcc,
     spi::{Config as SpiConfig, mode::Master, Spi},
     time::Hertz,
     usart::{self, BufferedUart, Config as UsartConfig, DataBits, Parity, StopBits}
@@ -25,22 +29,27 @@ use {defmt_rtt as _, panic_probe as _};
 use heapless::Vec;
 use static_cell::StaticCell;
 
+mod can;
 mod ethernet;
 mod ring;
 mod serial;
 mod sensor;
 
 bind_interrupts!(struct Irqs {
+    // Can
+    FDCAN1_IT0 => IT0InterruptHandler<FDCAN1>;
+    FDCAN1_IT1 => IT1InterruptHandler<FDCAN1>;
+
     // Ethernet
     EXTI0 => exti::InterruptHandler<interrupt::typelevel::EXTI0>;
-    DMA2_STREAM0 => dma::InterruptHandler<peripherals::DMA2_CH0>;
-    DMA2_STREAM3 => dma::InterruptHandler<peripherals::DMA2_CH3>;
+    GPDMA2_CHANNEL0 => DmaInterruptHandler<GPDMA2_CH0>;
+    GPDMA2_CHANNEL3 => DmaInterruptHandler<GPDMA2_CH3>;
 
     // I2c
-    I2C1_EV => i2c::EventInterruptHandler<peripherals::I2C1>;
-    I2C1_ER => i2c::ErrorInterruptHandler<peripherals::I2C1>;
-    DMA1_STREAM0 => dma::InterruptHandler<peripherals::DMA1_CH0>;
-    DMA1_STREAM6 => dma::InterruptHandler<peripherals::DMA1_CH6>;
+    I2C1_EV => i2c::EventInterruptHandler<I2C1>;
+    I2C1_ER => i2c::ErrorInterruptHandler<I2C1>;
+    GPDMA1_CHANNEL0 => DmaInterruptHandler<GPDMA1_CH0>;
+    GPDMA1_CHANNEL6 => DmaInterruptHandler<GPDMA1_CH6>;
 
     // Serial
     USART1 => usart::BufferedInterruptHandler<USART1>;
@@ -61,25 +70,11 @@ async fn net_task(mut runner: embassy_net::Runner<'static, Device<'static>>) -> 
 async fn main(spawner: Spawner) {
     // Peripherals
     let mut config = Config::default();
-    {
-        use embassy_stm32::rcc::*;
-        config.rcc.hse = Some(Hse {
-            freq: Hertz(8_000_000),
-            mode: HseMode::Bypass,
-        });
-        config.rcc.pll_src = PllSource::HSE;
-        config.rcc.pll = Some(Pll {
-            prediv: PllPreDiv::DIV4,
-            mul: PllMul::MUL180,
-            divp: Some(PllPDiv::DIV2), // 8mhz / 4 * 180 / 2 = 180Mhz.
-            divq: None,
-            divr: None,
-        });
-        config.rcc.ahb_pre = AHBPrescaler::DIV1;
-        config.rcc.apb1_pre = APBPrescaler::DIV4;
-        config.rcc.apb2_pre = APBPrescaler::DIV2;
-        config.rcc.sys = Sysclk::PLL1_P;
-    }
+    config.rcc.hse = Some(rcc::Hse {
+        freq: embassy_stm32::time::Hertz(8_000_000),
+        mode: rcc::HseMode::Oscillator,
+    });
+    config.rcc.mux.fdcan12sel = rcc::mux::Fdcansel::HSE;
     let p = embassy_stm32::init(config);
 
     info!("Hello World!");
@@ -95,7 +90,7 @@ async fn main(spawner: Spawner) {
     let mut spi_cfg = SpiConfig::default();
     spi_cfg.frequency = Hertz(50_000_000); // up to 50m works
     let (miso, mosi, clk) = (p.PA6, p.PA7, p.PA5);
-    let spi = Spi::new(p.SPI1, clk, mosi, miso, p.DMA2_CH3, p.DMA2_CH0, Irqs, spi_cfg);
+    let spi = Spi::new(p.SPI1, clk, mosi, miso, p.GPDMA2_CH3, p.GPDMA2_CH0, Irqs, spi_cfg);
     let cs = Output::new(p.PA4, Level::High, Speed::VeryHigh);
     let spi = unwrap!(ExclusiveDevice::new(spi, cs, Delay));
 
@@ -130,7 +125,7 @@ async fn main(spawner: Spawner) {
     info!("Network task initialized");
 
     // I2c
-    let i2c = I2c::new(p.I2C1, p.PB8, p.PB7, p.DMA1_CH6, p.DMA1_CH0, Irqs, Default::default());
+    let i2c = I2c::new(p.I2C1, p.PB8, p.PB7, p.GPDMA1_CH6, p.GPDMA1_CH0, Irqs, Default::default());
 
     // Usart
     let mut config = UsartConfig::default();
@@ -151,13 +146,24 @@ async fn main(spawner: Spawner) {
         config
     ).unwrap();
 
+    // Can
+    let mut can = CanConfigurator::new(p.FDCAN1, p.PA11, p.PA12, Irqs);
+    can.set_bitrate(125_000);
+    // let mut can = can.into_internal_loopback_mode();
+    let can = can.into_normal_mode();
+
     // Spawn tasks
+    spawner.spawn(can::task(can).unwrap());
     spawner.spawn(ethernet::task(stack).unwrap());
     spawner.spawn(ring::task(p.PB2, p.PB3, p.EXTI2).unwrap());
     spawner.spawn(serial::task(buf_usart).unwrap());
     spawner.spawn(sensor::task(i2c).unwrap());
 
+    // default task
+    let mut led = Output::new(p.PC13, Level::High, Speed::Low);
+
     loop {
+        led.toggle();
         Timer::after_millis(500).await;
     }
 }

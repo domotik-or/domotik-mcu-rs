@@ -1,6 +1,14 @@
 Building
 ========
 
+Add the target:
+
+.. code:: console
+
+    rustup target add thumbv8m.main-none-eabihf
+
+Build the target:
+
 .. code:: console
 
     cargo build -release
@@ -8,22 +16,21 @@ Building
 Flashing
 ========
 
-The chip is a STM32F411CEU6.
+The chip is a STM32H523CCU6.
 
 .. code:: console
 
-    cargo flash --release --chip STM32F411CE
+    cargo flash --release --chip STM32H523CC
 
 generating delivery files
 =========================
 
-Package to be installed : jsbeautifier
+Package to be installed : jsbeautifier.
 
 .. code:: console
 
     cargo objcopy --release -- -O ihex delivery/pans-rs.hex
     cargo metadata --format-version 1 | js-beautify > delivery/metadata.json
-
 
 Testing the libraries
 =====================
