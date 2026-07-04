@@ -3,6 +3,8 @@ use embassy_executor::task;
 // use embassy_time::Timer;
 use embassy_stm32::can::Can;
 
+use crate::state::set_humidity_and_temperature;
+
 #[task]
 pub async fn task(can: Can<'static>) {
     let (mut _tx, mut rx, _props) = can.split();
@@ -18,6 +20,8 @@ pub async fn task(can: Can<'static>) {
             let h: u16 = u16::from_be_bytes(buf).try_into().unwrap();
 
             info!("temperature: {}, humidity: {}", t, h);
+
+            set_humidity_and_temperature(h as f32 / 100.0, t as f32 / 100.0).await;
         };
     };
 }

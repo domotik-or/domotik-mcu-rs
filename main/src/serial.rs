@@ -1,10 +1,11 @@
 use defmt::info;
 use embassy_executor::task;
-// use embassy_time::Timer;
+use embassy_time::Timer;
 use embassy_stm32::usart::BufferedUart;
 use embedded_io_async::Read;
 
 use my_libs::linky::Linky;
+use crate::state::set_linky;
 
 #[task]
 pub async fn task(mut buf_usart: BufferedUart<'static>) {
@@ -18,6 +19,12 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
 
         linky.decode_frame(&buf, n);
 
-        // Timer::after_millis(500).await;
+        if let Some(east) = linky.east {
+            if let Some(sinst) = linky.sinst {
+                set_linky(east, sinst).await;
+            };
+        }
+
+        Timer::after_secs(30).await;
     };
 }

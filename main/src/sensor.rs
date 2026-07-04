@@ -7,6 +7,8 @@ use embassy_stm32::{
 };
 use embassy_bmp280::{Bmp280, Bmp280Address, Bmp280Config};
 
+use crate::state::set_pressure;
+
 #[task]
 pub async fn task(i2c_device: I2c<'static, Async, Master>) {
     // Adresse par défaut
@@ -24,5 +26,7 @@ pub async fn task(i2c_device: I2c<'static, Async, Master>) {
         let press_hpa = press_raw as f32 / (256.0 * 100.0); // hPa (avec feature "float")
 
         info!("temperature: {}, pressure: {}", temp_cdeg, press_hpa);
+
+        set_pressure(press_hpa).await;
     }
 }
