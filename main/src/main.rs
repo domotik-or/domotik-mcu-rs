@@ -25,7 +25,6 @@ use embassy_time::Timer;
 use {defmt_rtt as _, panic_probe as _};
 
 use board::Board;
-use network::init as network_init;
 
 
 #[embassy_executor::main]
@@ -54,7 +53,7 @@ async fn main(spawner: Spawner) {
     info!("Rtc programmed");
 
     // network
-    let stack = network_init(
+    let stack = network::bring_up(
         &spawner, board.spi_bus, board.cs_w5500, board.int_w5500, board.reset_w5500, board.rng
     ).await;
 

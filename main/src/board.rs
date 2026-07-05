@@ -26,9 +26,10 @@ use embassy_sync::{
 };
 use static_cell::StaticCell;
 
+pub type SpiPeripheral = Spi<'static, Async, SpiMaster>;
 pub type SpiBus = Mutex<
     CriticalSectionRawMutex,
-    Spi<'static, Async, SpiMaster>,
+    SpiPeripheral
 >;
 
 const SPI_FREQ: u32 = 9_000_000;
