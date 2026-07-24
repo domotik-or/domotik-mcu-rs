@@ -49,6 +49,9 @@ pub async fn bring_up(
     int: ExtiInput<'static, Async>,
     reset: Output<'static>,
     mut rng: Rng<'static, RNG>,
+    ip: Ipv4Address,
+    gateway: Ipv4Address,
+    mask: u8,
 ) -> Stack<'static> {
     let mac_addr = generate_mac();
     let state = STATE.init(State::new());
@@ -65,9 +68,9 @@ pub async fn bring_up(
     // Network stack
     // let config = embassy_net::Config::dhcpv4(Default::default());
     let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
-       address: Ipv4Cidr::new(Ipv4Address::new(192,168, 1, 50), 24),
+       address: Ipv4Cidr::new(ip, mask),
        dns_servers: Vec::new(),
-       gateway: Some(Ipv4Address::new(192, 168, 1, 1)),
+       gateway: Some(gateway),
     });
     // let (stack, net_runner) = embassy_net::new(device, config, RESOURCES.init(StackResources::new()), seed);
     let ressource = RESOURCES.init(StackResources::new());

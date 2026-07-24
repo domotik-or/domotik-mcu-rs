@@ -41,7 +41,7 @@ async fn main(spawner: Spawner) {
 
     let mut board = Board::init(p);
 
-    let _config = boot::read_config(board.spi_bus, board.cs_sd);
+    let config = boot::read_config(board.spi_bus, board.cs_sd);
 
     info!("Config loaded");
 
@@ -54,7 +54,8 @@ async fn main(spawner: Spawner) {
 
     // network
     let stack = network::bring_up(
-        &spawner, board.spi_bus, board.cs_w5500, board.int_w5500, board.reset_w5500, board.rng
+        &spawner, board.spi_bus, board.cs_w5500, board.int_w5500, board.reset_w5500, board.rng,
+        config.ip, config.gateway, config.mask,
     ).await;
 
     info!("Network ready");
