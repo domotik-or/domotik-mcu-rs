@@ -1,8 +1,13 @@
 #![no_std]
 #![no_main]
 
+mod config;
+mod sd;
+
 use defmt::*;
-use {defmt_rtt as _, panic_probe as _};
+use defmt_rtt as _;
+// Let panic_probe handle our panic routine
+use panic_probe as _;
 
 use embassy_executor::{Spawner, task};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
@@ -17,16 +22,21 @@ use embassy_stm32::{
     interrupt,
     mode::Async,
     Peripherals,
-    peripherals::{GPDMA1_CH0, GPDMA1_CH1, RNG},
-    rcc::{Hse, HseMode, mux::Fdcansel},
-    rng::{InterruptHandler as RngInterruptHandler, Rng },
-    spi::{Config as SpiConfig, mode::Master as SpiMaster, Spi},
+    peripherals::{DMA2_CH2, DMA2_CH3},
+    rcc::{
+        self, AHBPrescaler, APBPrescaler, Hse, HseMode, Pll, PllPDiv,
+        PllPreDiv, PllQDiv, PllMul, PllSource, Sysclk,
+    },
+    spi::{Config as SpiConfig, MODE_0, mode::Master as SpiMaster, Spi},
     time::Hertz,
     uid,
 };
 use embassy_time::Timer;
 use heapless::Vec;
 use static_cell::StaticCell;
+
+use config::{ConfigData, parse_config};
+use sd::{SdError, SdSpi, BlockReader};
 
 pub type SpiPeripheral = Spi<'static, Async, SpiMaster>;
 type EthernetSpiDevice = ExclusiveDevice<
@@ -39,8 +49,8 @@ type EthernetRunner = embassy_net_wiznet::Runner<
 >;
 type NetworkRunner = embassy_net::Runner<'static, Device<'static>>;
 
-const ETH_SPI_FREQ: u32 = 400_000;
-const SD_SPI_FREQ: u32 = 18_000_000;
+const ETH_SPI_FREQ: u32 = 18_000_000;
+const SD_SPI_FREQ: u32 = 400_000;
 
 static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 static STATE: StaticCell<State<2, 2>> = StaticCell::new();
@@ -49,14 +59,11 @@ static W5500_SPI: StaticCell<EthernetSpiDevice> = StaticCell::new();
 bind_interrupts!(struct Irqs {
     // Spi
     EXTI0 => ExtiInterruptHandler<interrupt::typelevel::EXTI0>;
-    GPDMA1_CHANNEL0 => DmaInterruptHandler<GPDMA1_CH0>;
-    GPDMA1_CHANNEL1 => DmaInterruptHandler<GPDMA1_CH1>;
+    DMA2_STREAM2 => DmaInterruptHandler<DMA2_CH2>;
+    DMA2_STREAM3 => DmaInterruptHandler<DMA2_CH3>;
 
     // Exti
     EXTI2 => ExtiInterruptHandler<interrupt::typelevel::EXTI2>;
-
-    // Random Number Generator
-    RNG => RngInterruptHandler<RNG>;
 });
 
 pub struct Board {
@@ -67,35 +74,31 @@ pub struct Board {
     pub reset_w5500: Output<'static>,
 
     pub cs_sd: Output<'static>,
-
-    pub rng: Rng<'static, RNG>,
 }
 
 impl Board {
     pub fn init(p: Peripherals) -> Self {
         // Spi
-        let spi_cfg = SpiConfig::default();
+        let mut spi_cfg = SpiConfig::default();
+        spi_cfg.mode = MODE_0;
         let spi = Spi::new(
             p.SPI1,
             p.PA5, // SCK
             p.PA7, // MOSI
             p.PA6, // MISO
-            p.GPDMA1_CH0,
-            p.GPDMA1_CH1,
+            p.DMA2_CH3,
+            p.DMA2_CH2,
             Irqs,
             spi_cfg,
         );
 
         // W5500 pins
-        let cs_w5500 = Output::new(p.PA4, Level::High, Speed::VeryHigh);
+        let cs_w5500 = Output::new(p.PA3, Level::High, Speed::VeryHigh);
         let int_w5500 = ExtiInput::new(p.PB0, p.EXTI0, Pull::Up, Irqs);
         let reset_w5500 = Output::new(p.PB1, Level::High, Speed::VeryHigh);
 
         // SD CARD CS (boot phase only)
-        let cs_sd = Output::new(p.PB12, Level::High, Speed::VeryHigh);
-
-        // Misc
-        let rng = Rng::new(p.RNG, Irqs);
+        let cs_sd = Output::new(p.PA4, Level::High, Speed::VeryHigh);
 
         Self {
             spi,
@@ -103,39 +106,30 @@ impl Board {
             int_w5500,
             reset_w5500,
             cs_sd,
-            rng,
         }
     }
 }
 
-// placeholder SD type (depends on your driver)
-pub struct ConfigData {
-    pub ip: Ipv4Address,
-    pub gateway: Ipv4Address,
-    pub mask: u8,
-}
-
-pub fn load_sd_config(mut spi: SpiPeripheral, _cs_sd: Output<'static>) -> (ConfigData, SpiPeripheral) {
-    // set correct freaq for sd
+pub fn load_sd_config(mut spi: SpiPeripheral, cs_sd: Output<'static>) -> Result<(ConfigData, SpiPeripheral), SdError> {
+    // set correct freq for sd
     let mut spi_cfg = SpiConfig::default();
     spi_cfg.frequency = Hertz(SD_SPI_FREQ);
+    spi_cfg.mode = MODE_0;
     spi.set_config(&spi_cfg).unwrap();
 
-    // let mut sd = fake_sd_driver(spi_bus, cs_sd);
+    let mut sd = SdSpi::new(spi, cs_sd)?;
+    sd.init()?;
 
-    // pseudo-code
-    let config = ConfigData {
-        ip: Ipv4Address::new(192, 168, 1, 50),
-        mask: 24,
-        gateway: Ipv4Address::new(192, 168, 1, 1),
-    };
+    let mut sector = [0u8;512];
+    sd.read_block(0, &mut sector).unwrap();
+
+    let config = parse_config(&sector).unwrap();
 
     // return SPI ownership
-    // let spi = sd.release_spi();
+    let (spi, _) = sd.release();
 
-    (config, spi)
+    Ok((config, spi))
 }
-
 
 const FNV_OFFSET: u32 = 0x811C9DC5;
 const FNV_PRIME: u32 = 0x01000193;
@@ -181,27 +175,24 @@ pub async fn bring_up(
     cs: Output<'static>,
     int: ExtiInput<'static, Async>,
     reset: Output<'static>,
-    mut rng: Rng<'static, RNG>,
     ip: Ipv4Address,
     gateway: Ipv4Address,
     mask: u8,
 ) -> Stack<'static> {
-    // set correct freaq for eth
+    // set correct freq for eth
     let mut spi_cfg = SpiConfig::default();
     spi_cfg.frequency = Hertz(ETH_SPI_FREQ);
+    spi_cfg.mode = MODE_0;
     spi.set_config(&spi_cfg).unwrap();
 
     let mac_addr = generate_mac();
     let state = STATE.init(State::new());
-    let spi_dev = W5500_SPI.init( ExclusiveDevice::new_no_delay(spi, cs).unwrap());
+    let spi_dev = W5500_SPI.init(ExclusiveDevice::new_no_delay(spi, cs).unwrap());
     let (device, eth_runner) = embassy_net_wiznet::new::<2, 2, W5500, _, _, _>(
         mac_addr, state, spi_dev, int, reset
     ).await.unwrap();
 
-    // Generate random seed
-    let mut seed = [0; 8];
-    unwrap!(rng.async_fill_bytes(&mut seed).await);
-    let seed = u64::from_le_bytes(seed);
+    let seed = 0_u64;
 
     // Network stack
     // let config = embassy_net::Config::dhcpv4(Default::default());
@@ -229,24 +220,52 @@ pub async fn bring_up(
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Peripherals
-    let mut config = Config::default();
-    config.rcc.hse = Some(Hse {
-        freq: embassy_stm32::time::Hertz(8_000_000),
-        mode: HseMode::Oscillator,
+    let mut config = embassy_stm32::Config::default();
+
+    config.rcc.hse = Some(embassy_stm32::rcc::Hse {
+        freq: embassy_stm32::time::Hertz(25_000_000),
+        mode: embassy_stm32::rcc::HseMode::Oscillator,
     });
-    config.rcc.hsi48 = Some(Default::default()); // needed for RNG
-    config.rcc.mux.fdcan12sel = Fdcansel::HSE;
+
+    config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSE;
+
+    config.rcc.pll = Some(embassy_stm32::rcc::Pll {
+        prediv: embassy_stm32::rcc::PllPreDiv::DIV25,
+        mul: embassy_stm32::rcc::PllMul::MUL336,
+        divp: Some(embassy_stm32::rcc::PllPDiv::DIV4),
+        divq: None,
+        divr: None,
+    });
+
+    config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;
+
+    config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
+    config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV2;
+    config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+
     let p = embassy_stm32::init(config);
+
+    info!("MCU initialized");
 
     let board = Board::init(p);
 
-    let (config, spi) = load_sd_config(board.spi, board.cs_sd);
+    info!("Board initialized");
 
-    info!("Config loaded");
+    Timer::after_millis(100).await;
+
+    let (config, spi) = load_sd_config(board.spi, board.cs_sd).unwrap();
+
+    info!("Configuration loaded {:?}", config);
+
+    loop {
+        Timer::after_millis(500).await;
+    }
+
+    info!("Configuring network");
 
     // network
     let _stack = bring_up(
-        &spawner, spi, board.cs_w5500, board.int_w5500, board.reset_w5500, board.rng,
+        &spawner, spi, board.cs_w5500, board.int_w5500, board.reset_w5500,
         config.ip, config.gateway, config.mask,
     ).await;
 

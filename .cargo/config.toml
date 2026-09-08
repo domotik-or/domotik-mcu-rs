@@ -1,10 +1,8 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
-# uncomment ONE of these three option to make `cargo run` start a GDB session
 # which option to pick depends on your system
-# runner = "arm-none-eabi-gdb -q -x openocd.gdb"
-runner = "gdb-multiarch -q -x openocd/openocd.gdb"
-# runner = "gdb -q -x openocd/openocd.gdb"
-# runner = "probe-rs flash STM32H523CC"
+# runner = "gdb-multiarch -q -x debug/openocd.gdb"
+# runner = "probe-rs flash STM32F401CC"
+runner = "probe-rs run --chip STM32F401CC --probe c251:f001 --scan-region ram --reset"
 
 rustflags = [
   "-C", "link-arg=-Map=target/target.map",
@@ -34,10 +32,10 @@ rustflags = [
 # target = "thumbv6m-none-eabi"        # Cortex-M0 and Cortex-M0+
 # target = "thumbv7m-none-eabi"        # Cortex-M3
 # target = "thumbv7em-none-eabi"       # Cortex-M4 and Cortex-M7 (no FPU)
-# target = "thumbv7em-none-eabihf"     # Cortex-M4F and Cortex-M7F (with FPU)
+target = "thumbv7em-none-eabihf"     # Cortex-M4F and Cortex-M7F (with FPU)
 # target = "thumbv8m.base-none-eabi"   # Cortex-M23
 # target = "thumbv8m.main-none-eabi"   # Cortex-M33 (no FPU)
-target = "thumbv8m.main-none-eabihf" # Cortex-M33 (with FPU)
+# target = "thumbv8m.main-none-eabihf" # Cortex-M33 (with FPU)
 
 # stm32f405: cortex-M4
 # stm32f412: cortex-M4
@@ -45,5 +43,6 @@ target = "thumbv8m.main-none-eabihf" # Cortex-M33 (with FPU)
 # stm32g474: cortex-M4
 
 [env]
+DEFMT_LOG = "info"
 API_HOST = "domotique.franck-barbenoire.fr/api"
 API_PORT = "8080"
