@@ -23,11 +23,8 @@ use embassy_stm32::{
     mode::Async,
     Peripherals,
     peripherals::{DMA2_CH2, DMA2_CH3},
-    rcc::{
-        self, AHBPrescaler, APBPrescaler, Hse, HseMode, Pll, PllPDiv,
-        PllPreDiv, PllQDiv, PllMul, PllSource, Sysclk,
-    },
-    spi::{Config as SpiConfig, MODE_0, mode::Master as SpiMaster, Spi},
+    rcc::{AHBPrescaler, APBPrescaler, HseMode::Oscillator, Pll, PllPDiv, PllMul, PllPreDiv, Sysclk},
+    spi::{Config as SpiConfig, MODE_0, MODE_3, mode::Master as SpiMaster, Spi},
     time::Hertz,
     uid,
 };
@@ -49,7 +46,7 @@ type EthernetRunner = embassy_net_wiznet::Runner<
 >;
 type NetworkRunner = embassy_net::Runner<'static, Device<'static>>;
 
-const ETH_SPI_FREQ: u32 = 18_000_000;
+const ETH_SPI_FREQ: u32 = 1_000_000;
 const SD_SPI_FREQ: u32 = 400_000;
 
 static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
@@ -79,8 +76,6 @@ pub struct Board {
 impl Board {
     pub fn init(p: Peripherals) -> Self {
         // Spi
-        let mut spi_cfg = SpiConfig::default();
-        spi_cfg.mode = MODE_0;
         let spi = Spi::new(
             p.SPI1,
             p.PA5, // SCK
@@ -89,7 +84,7 @@ impl Board {
             p.DMA2_CH3,
             p.DMA2_CH2,
             Irqs,
-            spi_cfg,
+            SpiConfig::default(),
         );
 
         // W5500 pins
@@ -108,6 +103,20 @@ impl Board {
             cs_sd,
         }
     }
+}
+
+pub fn configure_sd(spi: &mut SpiPeripheral) {
+    let mut cfg = SpiConfig::default();
+    cfg.frequency = Hertz(SD_SPI_FREQ);
+    cfg.mode = MODE_3;
+    spi.set_config(&cfg).unwrap();
+}
+
+pub fn configure_w5500(spi: &mut SpiPeripheral) {
+    let mut cfg = SpiConfig::default();
+    cfg.frequency = Hertz(ETH_SPI_FREQ);
+    cfg.mode = MODE_0;
+    spi.set_config(&cfg).unwrap();
 }
 
 pub fn load_sd_config(mut spi: SpiPeripheral, cs_sd: Output<'static>) -> Result<(ConfigData, SpiPeripheral), SdError> {
@@ -171,19 +180,19 @@ async fn net_task(mut runner: NetworkRunner) -> ! {
 
 pub async fn bring_up(
     spawner: &Spawner,
-    mut spi: SpiPeripheral,
+    spi: SpiPeripheral,
     cs: Output<'static>,
     int: ExtiInput<'static, Async>,
-    reset: Output<'static>,
+    mut reset: Output<'static>,
     ip: Ipv4Address,
     gateway: Ipv4Address,
     mask: u8,
 ) -> Stack<'static> {
-    // set correct freq for eth
-    let mut spi_cfg = SpiConfig::default();
-    spi_cfg.frequency = Hertz(ETH_SPI_FREQ);
-    spi_cfg.mode = MODE_0;
-    spi.set_config(&spi_cfg).unwrap();
+    // Reset W5500
+    reset.set_low();
+    Timer::after_millis(10).await;
+    reset.set_high();
+    Timer::after_millis(100).await;
 
     let mac_addr = generate_mac();
     let state = STATE.init(State::new());
@@ -220,28 +229,25 @@ pub async fn bring_up(
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // Peripherals
-    let mut config = embassy_stm32::Config::default();
+    let mut config = Config::default();
 
-    config.rcc.hse = Some(embassy_stm32::rcc::Hse {
-        freq: embassy_stm32::time::Hertz(25_000_000),
-        mode: embassy_stm32::rcc::HseMode::Oscillator,
-    });
+    config.rcc.hse = Some(embassy_stm32::rcc::Hse { freq: Hertz(25_000_000), mode: Oscillator});
 
     config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSE;
 
-    config.rcc.pll = Some(embassy_stm32::rcc::Pll {
-        prediv: embassy_stm32::rcc::PllPreDiv::DIV25,
-        mul: embassy_stm32::rcc::PllMul::MUL336,
-        divp: Some(embassy_stm32::rcc::PllPDiv::DIV4),
+    config.rcc.pll = Some(Pll {
+        prediv: PllPreDiv::DIV25,
+        mul: PllMul::MUL336,
+        divp: Some(PllPDiv::DIV4),
         divq: None,
         divr: None,
     });
 
-    config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;
+    config.rcc.sys = Sysclk::PLL1_P;
 
-    config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
-    config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV2;
-    config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+    config.rcc.ahb_pre = AHBPrescaler::DIV1;
+    config.rcc.apb1_pre = APBPrescaler::DIV2;
+    config.rcc.apb2_pre = APBPrescaler::DIV1;
 
     let p = embassy_stm32::init(config);
 
@@ -253,23 +259,19 @@ async fn main(spawner: Spawner) {
 
     Timer::after_millis(100).await;
 
-    let (config, spi) = load_sd_config(board.spi, board.cs_sd).unwrap();
+    let mut spi = board.spi;
 
+    configure_sd(&mut spi);
+    let (config, mut spi) = load_sd_config(spi, board.cs_sd).unwrap();
     info!("Configuration loaded {:?}", config);
 
-    loop {
-        Timer::after_millis(500).await;
-    }
-
-    info!("Configuring network");
-
-    // network
+    configure_w5500(&mut spi);
     let _stack = bring_up(
         &spawner, spi, board.cs_w5500, board.int_w5500, board.reset_w5500,
         config.ip, config.gateway, config.mask,
     ).await;
 
-    info!("Network ready");
+    info!("Application ready");
 
     // Spawn tasks
 
