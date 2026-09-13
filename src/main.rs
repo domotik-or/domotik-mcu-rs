@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod crc;
 mod config;
 mod sd;
 
@@ -9,6 +10,7 @@ use defmt_rtt as _;
 // Let panic_probe handle our panic routine
 use panic_probe as _;
 
+use chrono::{NaiveDate, NaiveDateTime};
 use embassy_executor::{Spawner, task};
 use embedded_hal_bus::spi::{ExclusiveDevice, NoDelay};
 use embassy_net::{self, Ipv4Address, Ipv4Cidr, Stack, StackResources};
@@ -24,7 +26,8 @@ use embassy_stm32::{
     Peripherals,
     peripherals::{DMA2_CH2, DMA2_CH3},
     rcc::{AHBPrescaler, APBPrescaler, HseMode::Oscillator, Pll, PllPDiv, PllMul, PllPreDiv, Sysclk},
-    spi::{Config as SpiConfig, MODE_0, MODE_3, mode::Master as SpiMaster, Spi},
+    rtc::{Rtc, RtcConfig, RtcTimeProvider},
+    spi::{Config as SpiConfig, MODE_0, mode::Master as SpiMaster, Spi},
     time::Hertz,
     uid,
 };
@@ -71,6 +74,9 @@ pub struct Board {
     pub reset_w5500: Output<'static>,
 
     pub cs_sd: Output<'static>,
+
+    pub rtc: Rtc,
+    pub time_provider: RtcTimeProvider,
 }
 
 impl Board {
@@ -95,12 +101,16 @@ impl Board {
         // SD CARD CS (boot phase only)
         let cs_sd = Output::new(p.PA4, Level::High, Speed::VeryHigh);
 
+        let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
+
         Self {
             spi,
             cs_w5500,
             int_w5500,
             reset_w5500,
             cs_sd,
+            rtc,
+            time_provider,
         }
     }
 }
@@ -108,7 +118,7 @@ impl Board {
 pub fn configure_sd(spi: &mut SpiPeripheral) {
     let mut cfg = SpiConfig::default();
     cfg.frequency = Hertz(SD_SPI_FREQ);
-    cfg.mode = MODE_3;
+    cfg.mode = MODE_0;
     spi.set_config(&cfg).unwrap();
 }
 
@@ -119,23 +129,19 @@ pub fn configure_w5500(spi: &mut SpiPeripheral) {
     spi.set_config(&cfg).unwrap();
 }
 
-pub fn load_sd_config(mut spi: SpiPeripheral, cs_sd: Output<'static>) -> Result<(ConfigData, SpiPeripheral), SdError> {
-    // set correct freq for sd
-    let mut spi_cfg = SpiConfig::default();
-    spi_cfg.frequency = Hertz(SD_SPI_FREQ);
-    spi_cfg.mode = MODE_0;
-    spi.set_config(&spi_cfg).unwrap();
-
-    let mut sd = SdSpi::new(spi, cs_sd)?;
-    sd.init()?;
+pub fn load_sd_config(
+    spi: SpiPeripheral, cs_sd: Output<'static>
+) -> Result<(ConfigData, SpiPeripheral), SdError> {
+    let mut sd_dev = SdSpi::new(spi, cs_sd)?;
+    sd_dev.init()?;
 
     let mut sector = [0u8;512];
-    sd.read_block(0, &mut sector).unwrap();
+    sd_dev.read_block(0, &mut sector)?;
 
     let config = parse_config(&sector).unwrap();
 
     // return SPI ownership
-    let (spi, _) = sd.release();
+    let (spi, _) = sd_dev.release();
 
     Ok((config, spi))
 }
@@ -253,11 +259,15 @@ async fn main(spawner: Spawner) {
 
     info!("MCU initialized");
 
-    let board = Board::init(p);
+    let mut board = Board::init(p);
 
     info!("Board initialized");
 
     Timer::after_millis(100).await;
+
+    // Rtc initialization (uncomment to set date and time)
+    // let now = NaiveDate::from_ymd_opt(2026, 9, 13).unwrap().and_hms_opt(15, 30, 15).unwrap();
+    // board.rtc.set_datetime(now.into()).unwrap();
 
     let mut spi = board.spi;
 
@@ -277,6 +287,9 @@ async fn main(spawner: Spawner) {
 
     // default task
     loop {
+        let now: NaiveDateTime = board.time_provider.now().unwrap().into();
+        info!("{}", now);
+
         Timer::after_millis(500).await;
     }
 }

@@ -28,6 +28,7 @@ embassy-net-wiznet = { version = "0.3.0", features = ["defmt"] }
 
 defmt = "1.0.1"
 defmt-rtt = "1.0.0"
+chrono = { version = "0.4.45", default-features = false, features = ["defmt"] }
 
 [profile.release]
 debug = 2

@@ -1,3 +1,14 @@
+write configuration on SD card
+==============================
+
+cd config
+./main.py --force --ip 192.168.1.59 --gateway 192.168.1.1 --mask 24 /dev/sde
+
+dump the card after configuration for checking
+==============================================
+
+dd if=/dev/sde  bs=512 count=1 | od -t x1
+
 udev rules
 ==========
 
