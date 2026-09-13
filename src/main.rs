@@ -203,6 +203,7 @@ pub async fn bring_up(
     let mac_addr = generate_mac();
     let state = STATE.init(State::new());
     let spi_dev = W5500_SPI.init(ExclusiveDevice::new_no_delay(spi, cs).unwrap());
+
     let (device, eth_runner) = embassy_net_wiznet::new::<2, 2, W5500, _, _, _>(
         mac_addr, state, spi_dev, int, reset
     ).await.unwrap();
