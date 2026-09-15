@@ -80,30 +80,20 @@ where
 
         self.select()?;
 
-        debug!(
-            "SD CMD{} TX = {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}",
-            cmd, packet[0], packet[1], packet[2],
-            packet[3], packet[4], packet[5]
-        );
-
         // Send command.
         self.spi.write(&packet).map_err(|_| SdError::Spi)?;
 
         // SD cards return 0xff while they are not ready.
         let mut response = [0xffu8];
 
-        for i in 0..8 {
+        for _ in 0..8 {
             self.spi.transfer_in_place(&mut response).map_err(|_| SdError::Spi)?;
 
-            debug!("SD CMD{} RX[{}] = {:02x}", cmd, i, response[0]);
-
             if response[0] != 0xff {
-                debug!("SD CMD{} response = {:02x}", cmd, response[0]);
                 return Ok(response[0]);
             }
         }
 
-        debug!("SD CMD{} timeout", cmd);
         Err(SdError::Timeout)
     }
 
@@ -153,8 +143,6 @@ where
         let mut r7 = [0u8; 4];
         self.read_ff(&mut r7).map_err(|_| SdError::Spi)?;
 
-        debug!("SD R7 = {:02x} {:02x} {:02x} {:02x}", r7[0], r7[1], r7[2], r7[3]);
-
         self.deselect()?;
 
         if r7[2] != 0x01 || r7[3] != 0xaa {
@@ -192,18 +180,14 @@ where
             return Err(SdError::BadResponse);
         }
 
+        // Clock the response out with MOSI high.
         let mut ocr = [0u8; 4];
-
-        self.spi
-            .read(&mut ocr)
-            .map_err(|_| SdError::Spi)?;
+        self.read_ff(&mut ocr)?;
 
         self.deselect()?;
 
         // CCS bit tells us whether the card uses block addressing.
         self.block_addressing = (ocr[0] & 0x40) != 0;
-
-        debug!("SD block addressing = {}", self.block_addressing);
 
         // SDSC cards need a 512-byte block length.
         if !self.block_addressing {
@@ -241,8 +225,6 @@ where
                 .ok_or(SdError::InvalidCard)?
         };
 
-        debug!("SD CMD17 argument = {:08x}", argument);
-
         // CMD17: READ_SINGLE_BLOCK
         let r1 = self.command(17, argument, 0x01)?;
 
@@ -252,7 +234,7 @@ where
         }
 
         // Wait for data token 0xFE.
-        let mut token = [0xffu8];
+        let mut token = [0u8];
 
         for _ in 0..100_000 {
             self.read_ff(&mut token).map_err(|_| SdError::Spi)?;
@@ -278,8 +260,6 @@ where
 
         let received_crc = u16::from_be_bytes(crc);
         let calculated_crc = crc16(buffer);
-
-        debug!("SD CRC16 received={:04x} calculated={:04x}", received_crc, calculated_crc);
 
         if received_crc != calculated_crc {
             self.deselect()?;

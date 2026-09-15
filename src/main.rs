@@ -25,7 +25,10 @@ use embassy_stm32::{
     mode::Async,
     Peripherals,
     peripherals::{DMA2_CH2, DMA2_CH3},
-    rcc::{AHBPrescaler, APBPrescaler, HseMode::Oscillator, Pll, PllPDiv, PllMul, PllPreDiv, Sysclk},
+    rcc::{
+        AHBPrescaler, APBPrescaler, Hse, HseMode, LsConfig,
+        Pll, PllPDiv, PllSource, PllMul, PllPreDiv, Sysclk
+    },
     rtc::{Rtc, RtcConfig, RtcTimeProvider},
     spi::{Config as SpiConfig, MODE_0, mode::Master as SpiMaster, Spi},
     time::Hertz,
@@ -75,6 +78,8 @@ pub struct Board {
 
     pub cs_sd: Output<'static>,
 
+    pub led: Output<'static>,
+
     pub rtc: Rtc,
     pub time_provider: RtcTimeProvider,
 }
@@ -101,6 +106,8 @@ impl Board {
         // SD CARD CS (boot phase only)
         let cs_sd = Output::new(p.PA4, Level::High, Speed::VeryHigh);
 
+        let led =  Output::new(p.PC13, Level::High, Speed::Low);
+
         let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
 
         Self {
@@ -109,6 +116,7 @@ impl Board {
             int_w5500,
             reset_w5500,
             cs_sd,
+            led,
             rtc,
             time_provider,
         }
@@ -238,9 +246,11 @@ async fn main(spawner: Spawner) {
     // Peripherals
     let mut config = Config::default();
 
-    config.rcc.hse = Some(embassy_stm32::rcc::Hse { freq: Hertz(25_000_000), mode: Oscillator});
+    config.rcc.hse = Some(Hse { freq: Hertz(25_000_000), mode: HseMode::Oscillator});
 
-    config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSE;
+    config.rcc.ls = LsConfig::default_lse();
+
+    config.rcc.pll_src = PllSource::HSE;
 
     config.rcc.pll = Some(Pll {
         prediv: PllPreDiv::DIV25,
@@ -267,19 +277,37 @@ async fn main(spawner: Spawner) {
     Timer::after_millis(100).await;
 
     // Rtc initialization (uncomment to set date and time)
-    // let now = NaiveDate::from_ymd_opt(2026, 9, 13).unwrap().and_hms_opt(15, 30, 15).unwrap();
-    // board.rtc.set_datetime(now.into()).unwrap();
+    let now = NaiveDate::from_ymd_opt(2026, 9, 14).unwrap().and_hms_opt(17, 00, 15).unwrap();
+    board.rtc.set_datetime(now.into()).unwrap();
 
     let mut spi = board.spi;
 
+    info!("before 2s delay");
+    Timer::after_secs(2).await;
+    info!("after 2s delay");
+
     configure_sd(&mut spi);
-    let (config, mut spi) = load_sd_config(spi, board.cs_sd).unwrap();
-    info!("Configuration loaded {:?}", config);
+
+    let (sd_config, mut spi) = match load_sd_config(spi, board.cs_sd) {
+        Ok(result) => {
+            board.led.set_low(); // ON = SD SUCCESS
+            result
+        }
+        Err(_) => {
+            // LED remains OFF = SD FAILED
+            loop {
+                Timer::after_secs(1).await;
+            }
+        }
+    };
+
+    // let (sd_config, mut spi) = load_sd_config(spi, board.cs_sd).unwrap();
+    info!("Configuration loaded {:?}", sd_config);
 
     configure_w5500(&mut spi);
     let _stack = bring_up(
         &spawner, spi, board.cs_w5500, board.int_w5500, board.reset_w5500,
-        config.ip, config.gateway, config.mask,
+        sd_config.ip, sd_config.gateway, sd_config.mask,
     ).await;
 
     info!("Application ready");
@@ -289,8 +317,8 @@ async fn main(spawner: Spawner) {
     // default task
     loop {
         let now: NaiveDateTime = board.time_provider.now().unwrap().into();
-        info!("{}", now);
+        // debug!("{}", now);
 
-        Timer::after_millis(500).await;
+        Timer::after_secs(10).await;
     }
 }
