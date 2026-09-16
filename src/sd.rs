@@ -3,7 +3,7 @@ use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
 use defmt::*;
 
-use crate::crc::crc16;
+use crate::utils::crc16;
 
 // fn sd_crc(data: &[u8]) -> u8 {
 //     (crc7(data) << 1) | 1

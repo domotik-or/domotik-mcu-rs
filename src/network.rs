@@ -7,50 +7,22 @@ use embassy_stm32::{
     exti::ExtiInput,
     gpio::Output,
     mode::Async,
-    uid,
 };
 use embassy_time::Timer;
 use heapless::Vec;
 use static_cell::StaticCell;
 
 use crate::board::{EthernetSpiDevice, SpiPeripheral};
+use crate::utils::generate_mac;
 
 type EthernetRunner = embassy_net_wiznet::Runner<
     'static, W5500, &'static mut EthernetSpiDevice, ExtiInput<'static, Async>, Output<'static>
 >;
 type NetworkRunner = embassy_net::Runner<'static, Device<'static>>;
 
-const FNV_OFFSET: u32 = 0x811C9DC5;
-const FNV_PRIME: u32 = 0x01000193;
-
 static RESOURCES: StaticCell<StackResources<3>> = StaticCell::new();
 static STATE: StaticCell<State<2, 2>> = StaticCell::new();
 static W5500_SPI: StaticCell<EthernetSpiDevice> = StaticCell::new();
-
-fn fnv1a(data: &[u8]) -> u32 {
-    let mut hash = FNV_OFFSET;
-
-    for &b in data {
-        hash ^= b as u32;
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-
-    hash
-}
-
-fn generate_mac() -> [u8; 6] {
-    let uid = uid::uid();
-    let hash = fnv1a(&uid);
-
-    [
-        0x02,                           // Local administered, unicast
-        (hash >> 24) as u8,
-        (hash >> 16) as u8,
-        (hash >> 8) as u8,
-        hash as u8,
-        uid[11],                        // dernier octet de l'UID
-    ]
-}
 
 #[task]
 async fn ethernet_task(runner: EthernetRunner) -> ! {

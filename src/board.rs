@@ -4,10 +4,17 @@ use embassy_stm32::{
     dma::{InterruptHandler as DmaInterruptHandler},
     exti::{ExtiInput, InterruptHandler as ExtiInterruptHandler},
     gpio::{Output, Level, Speed, Pull},
+    i2c::{
+        Config as I2cConfig,
+        ErrorInterruptHandler as I2cErrorInterruptHandler,
+        EventInterruptHandler as I2cEventInterruptHandler,
+        I2c,
+        mode::Master as I2cMaster
+    },
     interrupt,
     mode::Async,
     Peripherals,
-    peripherals::{DMA2_CH2, DMA2_CH3},
+    peripherals::{DMA1_CH0, DMA1_CH6, DMA2_CH2, DMA2_CH3, I2C1},
     rtc::{Rtc, RtcConfig, RtcTimeProvider},
     spi::{Config as SpiConfig, MODE_0, mode::Master as SpiMaster, Spi},
     time::Hertz,
@@ -24,16 +31,23 @@ pub type EthernetSpiDevice = ExclusiveDevice<
 >;
 
 bind_interrupts!(struct Irqs {
+    // Exti
+    EXTI2 => ExtiInterruptHandler<interrupt::typelevel::EXTI2>;
+
+    // I2c
+    I2C1_EV => I2cEventInterruptHandler<I2C1>;
+    I2C1_ER => I2cErrorInterruptHandler<I2C1>;
+    DMA1_STREAM0 => DmaInterruptHandler<DMA1_CH0>;
+    DMA1_STREAM6 => DmaInterruptHandler<DMA1_CH6>;
+
     // Spi
     EXTI0 => ExtiInterruptHandler<interrupt::typelevel::EXTI0>;
     DMA2_STREAM2 => DmaInterruptHandler<DMA2_CH2>;
     DMA2_STREAM3 => DmaInterruptHandler<DMA2_CH3>;
-
-    // Exti
-    EXTI2 => ExtiInterruptHandler<interrupt::typelevel::EXTI2>;
 });
 
 pub struct Board {
+    pub i2c_dev: I2c<'static, Async, I2cMaster>,
     pub spi_dev: SpiPeripheral,
 
     pub cs_w5500: Output<'static>,
@@ -50,6 +64,9 @@ pub struct Board {
 
 impl Board {
     pub fn init(p: Peripherals) -> Self {
+        // I2c
+        let i2c_dev = I2c::new(p.I2C1, p.PB8, p.PB7, p.DMA1_CH6, p.DMA1_CH0, Irqs, I2cConfig::default());
+
         // Spi
         let spi_dev = Spi::new(
             p.SPI1,
@@ -75,6 +92,7 @@ impl Board {
         let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
 
         Self {
+            i2c_dev,
             spi_dev,
             cs_w5500,
             int_w5500,

@@ -4,9 +4,10 @@
 mod board;
 mod boot;
 mod config;
-mod crc;
 mod network;
+mod sensor;
 mod sd;
+mod utils;
 
 use defmt::*;
 use defmt_rtt as _;
@@ -35,13 +36,13 @@ async fn main(spawner: Spawner) {
     // Peripherals
     let mut config = Config::default();
 
-    config.rcc.hse = Some(Hse { freq: Hertz(25_000_000), mode: HseMode::Oscillator});
+    config.rcc.hse = Some(Hse{freq: Hertz(25_000_000), mode: HseMode::Oscillator});
 
     config.rcc.ls = LsConfig::default_lse();
 
     config.rcc.pll_src = PllSource::HSE;
 
-    config.rcc.pll = Some(Pll {
+    config.rcc.pll = Some(Pll{
         prediv: PllPreDiv::DIV25,
         mul: PllMul::MUL336,
         divp: Some(PllPDiv::DIV4),
@@ -102,6 +103,7 @@ async fn main(spawner: Spawner) {
     info!("Application ready");
 
     // Spawn tasks
+    spawner.spawn(sensor::task(board.i2c_dev).unwrap());
 
     // default task
     loop {
