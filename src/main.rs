@@ -5,8 +5,11 @@ mod board;
 mod boot;
 mod config;
 mod network;
-mod sensor;
+mod outdoor;
+mod ring;
 mod sd;
+mod sensor;
+mod tic;
 mod utils;
 
 use defmt::*;
@@ -103,7 +106,10 @@ async fn main(spawner: Spawner) {
     info!("Application ready");
 
     // Spawn tasks
+    spawner.spawn(outdoor::task(board.buf_usart2).unwrap());
+    spawner.spawn(ring::task(board.button, board.bell).unwrap());
     spawner.spawn(sensor::task(board.i2c_dev).unwrap());
+    spawner.spawn(tic::task(board.buf_usart1).unwrap());
 
     // default task
     loop {

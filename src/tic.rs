@@ -1,0 +1,31 @@
+use defmt::info;
+use embassy_executor::task;
+use embassy_time::Timer;
+use embassy_stm32::usart::BufferedUart;
+use embedded_io_async::Read;
+
+use my_libs::linky::Linky;
+
+#[task]
+pub async fn task(mut buf_usart: BufferedUart<'static>) {
+
+    let mut linky = Linky::new();
+    let mut buf = [0u8; 32];
+
+    loop {
+        if let Ok(n) = buf_usart.read(&mut buf).await {
+            if n != 0 {
+                for b in &mut buf[..n] { *b &= 0x7f; };
+                // info!("{}", &buf[..n]);
+
+                linky.decode_frame(&buf, n);
+
+                if let Some(east) = linky.get_east() {
+                    if let Some(sinst) = linky.get_sinsts() {
+                        info!("east: {}, sinst: {}", east, sinst);
+                    };
+                };
+            };
+        };
+    };
+}

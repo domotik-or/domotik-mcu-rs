@@ -14,12 +14,16 @@ use embassy_stm32::{
     interrupt,
     mode::Async,
     Peripherals,
-    peripherals::{DMA1_CH0, DMA1_CH6, DMA2_CH2, DMA2_CH3, I2C1},
+    peripherals::{DMA1_CH0, DMA1_CH6, DMA2_CH2, DMA2_CH3, I2C1, USART1, USART2},
     rtc::{Rtc, RtcConfig, RtcTimeProvider},
     spi::{Config as SpiConfig, MODE_0, mode::Master as SpiMaster, Spi},
     time::Hertz,
+    usart::{BufferedUart, BufferedInterruptHandler, Config as UsartConfig, DataBits, Parity, StopBits}
 };
+use static_cell::StaticCell;
 
+const LINKY_BAUD: u32 = 9600;
+const SENSOR_BAUD: u32 = 9600;
 const ETH_SPI_FREQ: u32 = 1_000_000;
 const SD_SPI_FREQ: u32 = 400_000;
 
@@ -29,6 +33,11 @@ pub type EthernetSpiDevice = ExclusiveDevice<
     Output<'static>,
     NoDelay,
 >;
+
+static RX_BUF_1: StaticCell<[u8; 64]> = StaticCell::new();
+static TX_BUF_1:StaticCell<[u8; 1]> = StaticCell::new();
+static RX_BUF_2: StaticCell<[u8; 32]> = StaticCell::new();
+static TX_BUF_2:StaticCell<[u8; 1]> = StaticCell::new();
 
 bind_interrupts!(struct Irqs {
     // Exti
@@ -44,9 +53,16 @@ bind_interrupts!(struct Irqs {
     EXTI0 => ExtiInterruptHandler<interrupt::typelevel::EXTI0>;
     DMA2_STREAM2 => DmaInterruptHandler<DMA2_CH2>;
     DMA2_STREAM3 => DmaInterruptHandler<DMA2_CH3>;
+
+    // Serial
+    USART1 => BufferedInterruptHandler<USART1>;
+    USART2 => BufferedInterruptHandler<USART2>;
 });
 
 pub struct Board {
+    pub buf_usart1: BufferedUart<'static>,
+    pub buf_usart2: BufferedUart<'static>,
+
     pub i2c_dev: I2c<'static, Async, I2cMaster>,
     pub spi_dev: SpiPeripheral,
 
@@ -56,6 +72,8 @@ pub struct Board {
 
     pub cs_sd: Output<'static>,
 
+    pub bell: Output<'static>,
+    pub button: ExtiInput<'static, Async>,
     pub led: Output<'static>,
 
     pub rtc: Rtc,
@@ -64,8 +82,33 @@ pub struct Board {
 
 impl Board {
     pub fn init(p: Peripherals) -> Self {
+        // Usart
+        // linky link
+        let mut config = UsartConfig::default();
+        // set Linky serial line configuration
+        config.baudrate = LINKY_BAUD;
+        config.parity = Parity::ParityEven;
+        config.data_bits = DataBits::DataBits7;
+        config.stop_bits = StopBits::STOP1;
+
+        let rx_buff = RX_BUF_1.init([0u8; 64]);
+        let tx_buff = TX_BUF_1.init([0u8; 1]);
+        let buf_usart1 = BufferedUart::new(p.USART1, p.PA10, p.PA9, tx_buff, rx_buff, Irqs, config).unwrap();
+
+        // sensor link
+        let mut config = UsartConfig::default();
+        // set sensor serial line configuration
+        config.baudrate = SENSOR_BAUD;
+        config.parity = Parity::ParityEven;
+        config.data_bits = DataBits::DataBits8;
+        config.stop_bits = StopBits::STOP1;
+
+        let rx_buff = RX_BUF_2.init([0u8; 32]);
+        let tx_buff = TX_BUF_2.init([0u8; 1]);
+        let buf_usart2 = BufferedUart::new(p.USART2, p.PA3, p.PA2, tx_buff, rx_buff, Irqs, config).unwrap();
+
         // I2c
-        let i2c_dev = I2c::new(p.I2C1, p.PB8, p.PB7, p.DMA1_CH6, p.DMA1_CH0, Irqs, I2cConfig::default());
+        let i2c_dev = I2c::new(p.I2C1, p.PB8, p.PB9, p.DMA1_CH6, p.DMA1_CH0, Irqs, I2cConfig::default());
 
         // Spi
         let spi_dev = Spi::new(
@@ -80,24 +123,30 @@ impl Board {
         );
 
         // W5500 pins
-        let cs_w5500 = Output::new(p.PA3, Level::High, Speed::VeryHigh);
+        let cs_w5500 = Output::new(p.PB3, Level::High, Speed::VeryHigh);
         let int_w5500 = ExtiInput::new(p.PB0, p.EXTI0, Pull::Up, Irqs);
         let reset_w5500 = Output::new(p.PB1, Level::High, Speed::VeryHigh);
 
         // SD CARD CS (boot phase only)
-        let cs_sd = Output::new(p.PA4, Level::High, Speed::VeryHigh);
+        let cs_sd = Output::new(p.PB4, Level::High, Speed::VeryHigh);
 
+        let bell = Output::new(p.PB10, Level::Low, Speed::Low);
+        let button = ExtiInput::new(p.PB2, p.EXTI2, Pull::None, Irqs);
         let led =  Output::new(p.PC13, Level::High, Speed::Low);
 
         let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
 
         Self {
+            buf_usart1,
+            buf_usart2,
             i2c_dev,
             spi_dev,
             cs_w5500,
             int_w5500,
             reset_w5500,
             cs_sd,
+            bell,
+            button,
             led,
             rtc,
             time_provider,
