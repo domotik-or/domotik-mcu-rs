@@ -132,7 +132,7 @@ impl Board {
 
         let bell = Output::new(p.PB10, Level::Low, Speed::Low);
         let button = ExtiInput::new(p.PB2, p.EXTI2, Pull::None, Irqs);
-        let led =  Output::new(p.PC13, Level::High, Speed::Low);
+        let led = Output::new(p.PC13, Level::High, Speed::Low);
 
         let (rtc, time_provider) = Rtc::new(p.RTC, RtcConfig::default());
 

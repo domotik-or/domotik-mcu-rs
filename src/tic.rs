@@ -1,9 +1,9 @@
 use defmt::info;
 use embassy_executor::task;
-use embassy_time::Timer;
 use embassy_stm32::usart::BufferedUart;
 use embedded_io_async::Read;
 
+use crate::state::linky::{set_east, set_sinsts};
 use my_libs::linky::Linky;
 
 #[task]
@@ -21,9 +21,13 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                 linky.decode_frame(&buf, n);
 
                 if let Some(east) = linky.get_east() {
-                    if let Some(sinst) = linky.get_sinsts() {
-                        info!("east: {}, sinst: {}", east, sinst);
-                    };
+                    set_east(east).await;
+                    info!("east: {}", east);
+                };
+
+                if let Some(sinsts) = linky.get_sinsts() {
+                    set_sinsts(sinsts).await;
+                    info!("sinsts: {}", sinsts);
                 };
             };
         };

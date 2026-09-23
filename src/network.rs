@@ -1,7 +1,15 @@
 use defmt::*;
 use embassy_executor::{Spawner, task};
 use embedded_hal_bus::spi::ExclusiveDevice;
-use embassy_net::{self, Ipv4Address, Ipv4Cidr, Stack, StackResources};
+use embassy_net::{
+    self,
+    dns::DnsSocket,
+    Ipv4Address,
+    Ipv4Cidr,
+    Stack,
+    StackResources,
+    tcp::client::{TcpClient, TcpClientState}
+};
 use embassy_net_wiznet::{self, chip::W5500, Device, State};
 use embassy_stm32::{
     exti::ExtiInput,
@@ -61,10 +69,11 @@ pub async fn bring_up(
     let seed = 0_u64;
 
     // Network stack
-    // let config = embassy_net::Config::dhcpv4(Default::default());
+    let mut dns_servers = Vec::new();
+    dns_servers.push(gateway).unwrap();
     let config = embassy_net::Config::ipv4_static(embassy_net::StaticConfigV4 {
        address: Ipv4Cidr::new(ip, mask),
-       dns_servers: Vec::new(),
+       dns_servers,
        gateway: Some(gateway),
     });
     // let (stack, net_runner) = embassy_net::new(device, config, RESOURCES.init(StackResources::new()), seed);
@@ -81,4 +90,11 @@ pub async fn bring_up(
     stack.wait_config_up().await;
 
     stack
+}
+
+static CLIENT_STATE: StaticCell<TcpClientState<1, 1024, 1024>> = StaticCell::new();
+
+pub fn create_tcp_clients(stack: Stack<'static>) -> (TcpClient<'static, 1, 1024, 1024>, DnsSocket<'static>) {
+    let client_state = CLIENT_STATE.init(TcpClientState::new());
+    (TcpClient::new(stack, client_state), DnsSocket::new(stack))
 }

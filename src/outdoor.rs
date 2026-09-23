@@ -1,8 +1,9 @@
 use defmt::info;
 use embassy_executor::task;
-use embassy_time::Timer;
 use embassy_stm32::usart::BufferedUart;
 use embedded_io_async::Read;
+
+use crate::state::set_outdoor;
 
 #[task]
 pub async fn task(mut buf_usart: BufferedUart<'static>) {
@@ -26,7 +27,15 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                 }
 
                 if b == b'\n' {
-                    // We expect: DATA CHECKSUM CR LF
+                    // Frame format
+                    // temp  hum   press
+                    // -1111,22222,333333C\r\n
+                    // 01111,22222,333333C\r\n
+                    // 0     6     12    18
+                    //                   -3
+                    // <---> <---> <---->
+                    //   5     5     6
+
                     if len >= 3 && frame[len - 2] == b'\r' {
                         let received_checksum = frame[len - 3];
 
@@ -37,14 +46,22 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                         if checksum == received_checksum {
                             // info!("valid: {}", &frame[..len - 3]);
 
-                            let temp = frame[0..4].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
-                            let temp = temp as f32 / 100.0;
-                            let humidity = frame[5..10].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
+                            let temperature = if frame[0] == b'-' {
+                                let temperature = frame[1..5].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
+                                -(temperature as f32 / 100.0)
+                            } else {
+                                let temperature = frame[0..5].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
+                                temperature as f32 / 100.0
+                            };
+
+                            let humidity = frame[6..11].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
                             let humidity = humidity as f32 / 100.0;
-                            let pressure = frame[11..17].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
+
+                            let pressure = frame[12..18].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
                             let pressure = pressure as f32 / 100.0;
 
-                            info!("temperature: {}, humidity: {}, pressure: {}", temp, humidity, pressure);
+                            set_outdoor(humidity, temperature, pressure).await;
+                            info!("temperature: {}, humidity: {}, pressure: {}", temperature, humidity, pressure);
                         } else {
                             info!(
                                 "bad checksum: received={} calculated={}",

@@ -4,11 +4,12 @@
 mod board;
 mod boot;
 mod config;
+mod http_requests;
 mod network;
 mod outdoor;
 mod ring;
 mod sd;
-mod sensor;
+mod state;
 mod tic;
 mod utils;
 
@@ -31,7 +32,7 @@ use embassy_time::Timer;
 
 use board::{Board, configure_sd, configure_w5500};
 use boot::load_sd_config;
-use network::bring_up;
+use network::{bring_up, create_tcp_clients};
 
 
 #[embassy_executor::main]
@@ -98,23 +99,26 @@ async fn main(spawner: Spawner) {
     info!("Configuration loaded {:?}", sd_config);
 
     configure_w5500(&mut spi_dev);
-    let _stack = bring_up(
+    let stack = bring_up(
         &spawner, spi_dev, board.cs_w5500, board.int_w5500, board.reset_w5500,
         sd_config.ip, sd_config.gateway, sd_config.mask,
     ).await;
+
+    let (tcp_client, dns_client) = create_tcp_clients(stack);
 
     info!("Application ready");
 
     // Spawn tasks
     spawner.spawn(outdoor::task(board.buf_usart2).unwrap());
     spawner.spawn(ring::task(board.button, board.bell).unwrap());
-    spawner.spawn(sensor::task(board.i2c_dev).unwrap());
     spawner.spawn(tic::task(board.buf_usart1).unwrap());
 
     // default task
     loop {
         let _now: NaiveDateTime = board.time_provider.now().unwrap().into();
         // debug!("{}", now);
+
+        http_requests::send(&dns_client, &tcp_client).await;
 
         Timer::after_secs(10).await;
     }

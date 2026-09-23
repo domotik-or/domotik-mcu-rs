@@ -10,60 +10,78 @@ Add the target (M4 + Fpu):
 write configuration on SD card
 ==============================
 
-cd config
-./main.py --force --ip 192.168.1.59 --gateway 192.168.1.1 --mask 24 /dev/sde
+.. code:: console
+
+    cd config
+    ./main.py --force --ip 192.168.1.59 --gateway 192.168.1.1 --mask 24 /dev/sde
 
 dump the sd card after writing configuration
 ============================================
 
-dd if=/dev/sde  bs=512 count=1 | od -t x1
+.. code:: console
+
+    dd if=/dev/sde  bs=512 count=1 | od -t x1
 
 udev rules
 ==========
 
 Create file /etc/udev/rules.d/60-cmsis-daplink.rules :
 
-# CMSIS-DAPLink debug probe
-SUBSYSTEM=="usb", ATTR{idVendor}=="c251", ATTR{idProduct}=="f001", TAG+="uaccess"
+.. code::
 
-# HID/CMSIS-DAPLink interface
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="f001", TAG+="uaccess"
+    # CMSIS-DAPLink debug probe
+    SUBSYSTEM=="usb", ATTR{idVendor}=="c251", ATTR{idProduct}=="f001", TAG+="uaccess"
 
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+    # HID/CMSIS-DAPLink interface
+    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="f001", TAG+="uaccess"
+
+.. code:: console
+
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
 
 Compile ST version of openocd
 =============================
 
-sudo apt install libusb-dev libhid-api libjim-dev
-git clone --recurse-submodules https://github.com/STMicroelectronics/OpenOCD.git
-cd OpenOCD/
-./bootstrap
-make
-sudo make install
+.. code:: console
+
+    sudo apt install libusb-dev libhid-api libjim-dev
+    git clone --recurse-submodules https://github.com/STMicroelectronics/OpenOCD.git
+    cd OpenOCD/
+    ./bootstrap
+    make
+    sudo make install
 
 Use
 ---
 
 debug :
 
-/usr/local/bin/openocd -f debug/openocd.cfg
+.. code:: console
+
+    /usr/local/bin/openocd -f debug/openocd.cfg
 
 Cargo
 =====
 
-cargo build --release
-cargo run --release
+.. code:: console
+
+    cargo build --release
+    cargo run --release
 
 Flash
 -----
 
 The chip is a STM32F401CC.
 
-cargo flash --release --chip STM32F401CC
+.. code:: console
+
+    cargo flash --release --chip STM32F401CC
 
 Run
 ---
+
+.. code:: console
 
     probe-rs run --chip STM32F401CC --probe c251:f001 --scan-region ram --reset target/thumbv7em-none-eabihf/release/domotik-mcu
     probe-rs attach --chip STM32F401CC --probe c251:f001 target/thumbv7em-none-eabihf/release/domotik-mcu
@@ -89,6 +107,7 @@ Debugging the libraries
 =======================
 
 .. code:: console
+
     cargo test --no-run --package my_libs --target x86_64-unknown-linux-gnu
     gdb target/x86_64-unknown-linux-gnu/debug/deps/my_libs-6e93679ae5c2141c
     (gdb) break my_libs::linky::Linky::decode_frame
