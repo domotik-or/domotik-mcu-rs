@@ -39,11 +39,12 @@ use board::{Board, configure_sd, configure_w5500};
 use boot::load_sd_config;
 use http_requests::HttpRequests;
 use network::{bring_up, create_tcp_clients};
-use rtc::RtcClock;
+use rtc::{RtcClock, SharedRtc};
 
-static TCP_CLIENT: StaticCell<TcpClient<'static, 1, 1024, 1024>> = StaticCell::new();
 static DNS_CLIENT: StaticCell<DnsSocket<'static>> = StaticCell::new();
 static HTTP: StaticCell<HttpRequests> = StaticCell::new();
+static RTC_CLOCK: StaticCell<SharedRtc> = StaticCell::new();
+static TCP_CLIENT: StaticCell<TcpClient<'static, 1, 1024, 1024>> = StaticCell::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -82,7 +83,9 @@ async fn main(spawner: Spawner) {
 
     Timer::after_millis(100).await;
 
-    let rtc = RtcClock::new(board.rtc, board.time_provider);
+    let rtc_clock: &'static SharedRtc = RTC_CLOCK.init(
+        SharedRtc::new(RtcClock::new(board.rtc, board.time_provider))
+    );
 
     let mut spi_dev = board.spi_dev;
 
@@ -121,7 +124,7 @@ async fn main(spawner: Spawner) {
 
     let tcp_client: &'static TcpClient<'static, 1, 1024, 1024> = TCP_CLIENT.init(tcp_client);
     let dns_client: &'static DnsSocket<'static> = DNS_CLIENT.init(dns_client);
-    let http: &'static HttpRequests = HTTP.init(HttpRequests::new(tcp_client, dns_client));
+    let http: &'static HttpRequests = HTTP.init(HttpRequests::new(tcp_client, dns_client, rtc_clock));
 
     #[cfg(feature = "defmt")]
     info!("Application ready");
@@ -134,9 +137,6 @@ async fn main(spawner: Spawner) {
 
     // default task
     loop {
-        let _ = rtc.get_datetime().unwrap();
-        // debug!("{}", now);
-
         Timer::after_secs(10).await;
     }
 }

@@ -8,6 +8,8 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 use heapless::String;
 use reqwless::{client::HttpClient, request::Method};
 
+use crate::rtc::SharedRtc;
+
 const API_URL: &str = env!("API_URL");
 
 static HTTP_LOCK: Mutex<CriticalSectionRawMutex, ()> = Mutex::new(());
@@ -15,13 +17,18 @@ static HTTP_LOCK: Mutex<CriticalSectionRawMutex, ()> = Mutex::new(());
 type Tcp = TcpClient<'static, 1, 1024, 1024>;
 
 pub struct HttpRequests {
-    tcp: &'static Tcp,
     dns: &'static DnsSocket<'static>,
+    tcp: &'static Tcp,
+    rtc: &'static SharedRtc,
 }
 
 impl HttpRequests {
-    pub const fn new(tcp: &'static Tcp, dns: &'static DnsSocket<'static>) -> Self {
-        Self{tcp, dns}
+    pub const fn new(
+        tcp: &'static Tcp,
+        dns: &'static DnsSocket<'static>,
+        rtc: &'static SharedRtc
+    ) -> Self {
+        Self{dns, rtc, tcp}
     }
 
     pub async fn get(&self, route: &str, query: Arguments<'_>) -> Result<u64, ()> {
@@ -74,6 +81,11 @@ impl HttpRequests {
 
         // Convert the text to a Unix timestamp.
         let timestamp = text.trim().parse::<u64>().map_err(|_| ())?;
+
+        {
+            let mut rtc = self.rtc.lock().await;
+            rtc.set_datetime(timestamp)?;
+        }
 
         Ok(timestamp)
     }
