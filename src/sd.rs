@@ -1,7 +1,8 @@
 use cortex_m;
+#[cfg(feature = "defmt")]
+use defmt::*;
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
-use defmt::*;
 
 use crate::utils::crc16;
 
@@ -10,7 +11,8 @@ use crate::utils::crc16;
 // }
 
 
-#[derive(Debug, Format)]
+#[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(Format))]
 pub enum SdError {
     Spi,
     Timeout,

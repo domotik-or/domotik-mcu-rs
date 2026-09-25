@@ -1,4 +1,5 @@
-use defmt::info;
+#[cfg(feature = "defmt")]
+use defmt::*;
 use embassy_executor::task;
 use embassy_time::{Duration, Timer};
 use embassy_stm32::{
@@ -27,6 +28,7 @@ async fn wait_button_pressed(button: &mut ExtiInput<'static, Async>) {
 pub async fn task(mut button: ExtiInput<'static, Async>, mut bell: Output<'static>) {
     loop {
         wait_button_pressed(&mut button).await;
+        #[cfg(feature = "defmt")]
         info!("Pulled!");
 
         // ring the bell five times

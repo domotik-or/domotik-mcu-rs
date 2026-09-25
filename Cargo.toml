@@ -10,27 +10,44 @@ edition = "2024"
 [dependencies]
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = "0.7.5"
-chrono = { version = "0.4.45", default-features = false, features = ["defmt"] }
+chrono = { version = "0.4.45", default-features = false }
 embedded-hal = "1.0.0"
 embedded-hal-bus = { version= "0.3.0", features = ["async"] }
 embedded-io-async = { version = "0.7.0" }
-panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+panic-probe = { version = "1.0.0" }
 heapless = { version = "0.9", default-features = false }
-reqwless = { version = "0.14.0", default-features = false, features = ["defmt"] }
-static_cell = "2"
+reqwless = { version = "0.14.0", default-features = false }
+static_cell = "2.1.1"
 crc32fast = { version = "1.5.1", default-features = false }
 
-embassy-stm32 = { version = "0.6.0", features = ["defmt", "stm32f401cc", "unstable-pac", "memory-x", "time-driver-tim4", "exti", "chrono"] }
-embassy-sync = { version = "0.8.0", features = ["defmt"] }
-embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt", "defmt"] }
-embassy-time = { version = "0.5.1", features = ["defmt", "defmt-timestamp-uptime", "tick-hz-32_768"] }
-embassy-net = { version = "0.9.1", features=["defmt", "dns", "medium-ethernet", "proto-ipv4", "tcp", "auto-icmp-echo-reply"] }
-embassy-net-wiznet = { version = "0.3.0", features = ["defmt"] }
+embassy-stm32 = { version = "0.6.0", features = ["stm32f401cc", "unstable-pac", "memory-x", "time-driver-tim4", "exti", "chrono"] }
+embassy-sync = { version = "0.8.0" }
+embassy-executor = { version = "0.10.0", features = ["platform-cortex-m", "executor-thread", "executor-interrupt"] }
+embassy-time = { version = "0.5.1", features = ["tick-hz-32_768"] }
+embassy-net = { version = "0.9.1", features=["dns", "medium-ethernet", "proto-ipv4", "tcp", "auto-icmp-echo-reply"] }
+embassy-net-wiznet = { version = "0.3.0" }
 
-defmt = "1.0.1"
-defmt-rtt = "1.0.0"
+defmt = { version = "1.0.1", optional = true }
+defmt-rtt = { version = "1.0.0", optional = true }
 
 my_libs = {path = "./my-libs"}
+
+[features]
+default = ["defmt"]
+defmt = [
+    "dep:defmt",
+    "dep:defmt-rtt",
+    "chrono/defmt",
+    "embassy-executor/defmt",
+    "embassy-net/defmt",
+    "embassy-net-wiznet/defmt",
+    "embassy-stm32/defmt",
+    "embassy-sync/defmt",
+    "embassy-time/defmt",
+    "embassy-time/defmt-timestamp-uptime",
+    "panic-probe/print-defmt",
+    "reqwless/defmt",
+]
 
 [profile.release]
 debug = 2

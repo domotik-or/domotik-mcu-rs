@@ -1,4 +1,4 @@
-use defmt::*;
+// use defmt::*;
 use embassy_executor::{Spawner, task};
 use embedded_hal_bus::spi::ExclusiveDevice;
 use embassy_net::{
@@ -81,10 +81,10 @@ pub async fn bring_up(
     let (stack, net_runner) = embassy_net::new(device, config, ressource, seed);
 
     // Launch ethernet task
-    spawner.spawn(unwrap!(ethernet_task(eth_runner)));
+    spawner.spawn(ethernet_task(eth_runner).unwrap());
 
     // Launch network task
-    spawner.spawn(unwrap!(net_task(net_runner)));
+    spawner.spawn(net_task(net_runner).unwrap());
 
     // Ensure DHCP configuration is up before trying to connect
     stack.wait_config_up().await;

@@ -1,5 +1,6 @@
 use embassy_net::Ipv4Address;
 use crc32fast::Hasher;
+#[cfg(feature = "defmt")]
 use defmt::*;
 
 #[derive(Debug)]
@@ -10,7 +11,8 @@ pub enum ConfigError {
 }
 
 // placeholder SD type (depends on your driver)
-#[derive(Debug, Format)]
+#[cfg_attr(feature = "defmt", derive(Format))]
+#[derive(Debug)]
 pub struct ConfigData {
     pub ip: Ipv4Address,
     pub gateway: Ipv4Address,

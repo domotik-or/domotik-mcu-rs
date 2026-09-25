@@ -13,7 +13,9 @@ mod state;
 mod tic;
 mod utils;
 
+#[cfg(feature = "defmt")]
 use defmt::*;
+#[cfg(feature = "defmt")]
 use defmt_rtt as _;
 // Let panic_probe handle our panic routine
 use panic_probe as _;
@@ -62,10 +64,12 @@ async fn main(spawner: Spawner) {
 
     let p = embassy_stm32::init(config);
 
+    #[cfg(feature = "defmt")]
     info!("MCU initialized");
 
     let mut board = Board::init(p);
 
+    #[cfg(feature = "defmt")]
     info!("Board initialized");
 
     Timer::after_millis(100).await;
@@ -76,8 +80,10 @@ async fn main(spawner: Spawner) {
 
     let mut spi_dev = board.spi_dev;
 
+    #[cfg(feature = "defmt")]
     info!("before 2s delay");
     Timer::after_secs(2).await;
+    #[cfg(feature = "defmt")]
     info!("after 2s delay");
 
     configure_sd(&mut spi_dev);
@@ -96,6 +102,7 @@ async fn main(spawner: Spawner) {
     };
 
     // let (sd_config, mut spi) = load_sd_config(spi, board.cs_sd).unwrap();
+    #[cfg(feature = "defmt")]
     info!("Configuration loaded {:?}", sd_config);
 
     configure_w5500(&mut spi_dev);
@@ -106,6 +113,7 @@ async fn main(spawner: Spawner) {
 
     let (tcp_client, dns_client) = create_tcp_clients(stack);
 
+    #[cfg(feature = "defmt")]
     info!("Application ready");
 
     // Spawn tasks

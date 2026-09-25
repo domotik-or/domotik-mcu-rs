@@ -1,4 +1,5 @@
-use defmt::info;
+#[cfg(feature = "defmt")]
+use defmt::*;
 use embassy_executor::task;
 use embassy_stm32::usart::BufferedUart;
 use embedded_io_async::Read;
@@ -61,8 +62,11 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                             let pressure = pressure as f32 / 100.0;
 
                             set_outdoor(humidity, temperature, pressure).await;
+
+                            #[cfg(feature = "defmt")]
                             info!("temperature: {}, humidity: {}, pressure: {}", temperature, humidity, pressure);
                         } else {
+                            #[cfg(feature = "defmt")]
                             info!(
                                 "bad checksum: received={} calculated={}",
                                 received_checksum,
