@@ -30,10 +30,10 @@ Create file /etc/udev/rules.d/60-cmsis-daplink.rules :
 .. code::
 
     # CMSIS-DAPLink debug probe
-    SUBSYSTEM=="usb", ATTR{idVendor}=="c251", ATTR{idProduct}=="f001", TAG+="uaccess"
+    SUBSYSTEM=="usb", ATTR{idVendor}=="c251", ATTR{idProduct}=="f001", MODE="0660", GROUP="plugdev"
 
     # HID/CMSIS-DAPLink interface
-    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="f001", TAG+="uaccess"
+    SUBSYSTEM=="hidraw", ATTRS{idVendor}=="c251", ATTRS{idProduct}=="f001", MODE="0660", GROUP="plugdev"
 
 .. code:: console
 
