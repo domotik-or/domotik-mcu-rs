@@ -18,7 +18,7 @@ enum Frame {
 
 pub struct Linky {
     east: Option<u32>,
-    sinsts: Option<u32>,
+    sinsts: Option<u16>,
     checksum: u8,
     data: u32,
     data_size: usize,
@@ -107,7 +107,7 @@ impl Linky {
                                 if *frame == Frame::East {
                                     self.east = Some(self.data);
                                 } else {
-                                    self.sinsts = Some(self.data);
+                                    self.sinsts = Some(self.data.try_into().unwrap());
                                 }
                             }
                         }
@@ -124,7 +124,7 @@ impl Linky {
         east
     }
 
-    pub fn get_sinsts(&mut self) -> Option<u32> {
+    pub fn get_sinsts(&mut self) -> Option<u16> {
         let sinsts = self.sinsts;
         self.sinsts = None;
         sinsts

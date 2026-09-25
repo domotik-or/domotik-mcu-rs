@@ -48,18 +48,16 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                             // info!("valid: {}", &frame[..len - 3]);
 
                             let temperature = if frame[0] == b'-' {
-                                let temperature = frame[1..5].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
-                                -(temperature as f32 / 100.0)
+                                let temperature = -frame[1..5].iter().fold(0i16, |n, &b| n * 10 + (b - b'0') as i16);
+                                temperature
                             } else {
-                                let temperature = frame[0..5].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
-                                temperature as f32 / 100.0
+                                let temperature = frame[0..5].iter().fold(0i16, |n, &b| n * 10 + (b - b'0') as i16);
+                                temperature
                             };
 
-                            let humidity = frame[6..11].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
-                            let humidity = humidity as f32 / 100.0;
+                            let humidity = frame[6..11].iter().fold(0u16, |n, &b| n * 10 + (b - b'0') as u16);
 
                             let pressure = frame[12..18].iter().fold(0u32, |n, &b| n * 10 + (b - b'0') as u32);
-                            let pressure = pressure as f32 / 100.0;
 
                             set_outdoor(humidity, temperature, pressure).await;
 

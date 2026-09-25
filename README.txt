@@ -112,3 +112,10 @@ Debugging the libraries
     gdb target/x86_64-unknown-linux-gnu/debug/deps/my_libs-6e93679ae5c2141c
     (gdb) break my_libs::linky::Linky::decode_frame
     (gdb) run
+
+Testing the link with a server
+==============================
+
+.. code:: console
+
+    wget -O - 'http://192.168.1.58:8080/sensor?humidity=50&temperature=22'

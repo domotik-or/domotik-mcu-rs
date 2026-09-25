@@ -8,6 +8,16 @@ use embassy_stm32::{
     mode::Async,
 };
 
+use crate::http_requests::HttpRequests;
+
+async fn send_ring(http: &'static HttpRequests) -> Result<(), ()>{
+    if let Ok(timestamp) = http.get("ring", format_args!("")).await {
+        #[cfg(feature = "defmt")]
+        info!("timestamp: {}", timestamp);
+    };
+
+    Ok(())
+}
 
 async fn wait_button_pressed(button: &mut ExtiInput<'static, Async>) {
     loop {
@@ -25,11 +35,15 @@ async fn wait_button_pressed(button: &mut ExtiInput<'static, Async>) {
 }
 
 #[task]
-pub async fn task(mut button: ExtiInput<'static, Async>, mut bell: Output<'static>) {
+pub async fn task(
+    http: &'static HttpRequests, mut button: ExtiInput<'static, Async>, mut bell: Output<'static>
+) {
     loop {
         wait_button_pressed(&mut button).await;
         #[cfg(feature = "defmt")]
         info!("Pulled!");
+
+        let _ = send_ring(http).await;
 
         // ring the bell five times
         for _ in 1..=5 {

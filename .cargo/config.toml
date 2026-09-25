@@ -43,6 +43,7 @@ target = "thumbv7em-none-eabihf"     # Cortex-M4F and Cortex-M7F (with FPU)
 # stm32g474: cortex-M4
 
 [env]
+# DEFMT_LOG = "info,embassy_net=warn,embassy_net_wiznet=debug"
 DEFMT_LOG = "info"
-API_HOST = "domotique.franck-barbenoire.fr/api"
-API_PORT = "8080"
+# API_URL = "domotique.franck-barbenoire.fr"
+API_URL = "http://192.168.1.58:8080"

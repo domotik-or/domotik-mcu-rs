@@ -7,7 +7,9 @@ mod config;
 mod http_requests;
 mod network;
 mod outdoor;
+mod planner;
 mod ring;
+mod rtc;
 mod sd;
 mod state;
 mod tic;
@@ -20,8 +22,8 @@ use defmt_rtt as _;
 // Let panic_probe handle our panic routine
 use panic_probe as _;
 
-use chrono::{NaiveDate, NaiveDateTime};
 use embassy_executor::Spawner;
+use embassy_net::{dns::DnsSocket, tcp::client::TcpClient};
 use embassy_stm32::{
     Config,
     rcc::{
@@ -31,11 +33,17 @@ use embassy_stm32::{
     time::Hertz,
 };
 use embassy_time::Timer;
+use static_cell::StaticCell;
 
 use board::{Board, configure_sd, configure_w5500};
 use boot::load_sd_config;
+use http_requests::HttpRequests;
 use network::{bring_up, create_tcp_clients};
+use rtc::RtcClock;
 
+static TCP_CLIENT: StaticCell<TcpClient<'static, 1, 1024, 1024>> = StaticCell::new();
+static DNS_CLIENT: StaticCell<DnsSocket<'static>> = StaticCell::new();
+static HTTP: StaticCell<HttpRequests> = StaticCell::new();
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -74,9 +82,7 @@ async fn main(spawner: Spawner) {
 
     Timer::after_millis(100).await;
 
-    // Rtc initialization (uncomment to set date and time)
-    let now = NaiveDate::from_ymd_opt(2026, 9, 14).unwrap().and_hms_opt(17, 00, 15).unwrap();
-    board.rtc.set_datetime(now.into()).unwrap();
+    let rtc = RtcClock::new(board.rtc, board.time_provider);
 
     let mut spi_dev = board.spi_dev;
 
@@ -113,20 +119,23 @@ async fn main(spawner: Spawner) {
 
     let (tcp_client, dns_client) = create_tcp_clients(stack);
 
+    let tcp_client: &'static TcpClient<'static, 1, 1024, 1024> = TCP_CLIENT.init(tcp_client);
+    let dns_client: &'static DnsSocket<'static> = DNS_CLIENT.init(dns_client);
+    let http: &'static HttpRequests = HTTP.init(HttpRequests::new(tcp_client, dns_client));
+
     #[cfg(feature = "defmt")]
     info!("Application ready");
 
     // Spawn tasks
     spawner.spawn(outdoor::task(board.buf_usart2).unwrap());
-    spawner.spawn(ring::task(board.button, board.bell).unwrap());
+    spawner.spawn(planner::task(&http).unwrap());
+    spawner.spawn(ring::task(&http, board.button, board.bell).unwrap());
     spawner.spawn(tic::task(board.buf_usart1).unwrap());
 
     // default task
     loop {
-        let _now: NaiveDateTime = board.time_provider.now().unwrap().into();
+        let _ = rtc.get_datetime().unwrap();
         // debug!("{}", now);
-
-        http_requests::send(&dns_client, &tcp_client).await;
 
         Timer::after_secs(10).await;
     }

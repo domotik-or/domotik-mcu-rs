@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use embassy_stm32::uid;
 
 pub fn crc7(data: &[u8]) -> u8 {

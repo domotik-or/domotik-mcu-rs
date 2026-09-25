@@ -3,14 +3,14 @@ use embassy_sync::mutex::Mutex;
 
 #[derive(Clone, Copy)]
 pub struct Outdoor {
-    pub humidity: f32,
-    pub pressure: f32,
-    pub temperature: f32,
+    pub humidity: u16,
+    pub pressure: u32,
+    pub temperature: i16,
 }
 
-static OUTDOOR: Mutex<CriticalSectionRawMutex, Outdoor> = Mutex::new(Outdoor{humidity: 0.0, pressure: 0.0, temperature: 0.0});
+static OUTDOOR: Mutex<CriticalSectionRawMutex, Outdoor> = Mutex::new(Outdoor{humidity: 0, pressure: 0, temperature: 0});
 
-pub async fn set(humidity: f32, temperature: f32, pressure: f32) {
+pub async fn set(humidity: u16, temperature: i16, pressure: u32) {
     let mut o = OUTDOOR.lock().await;
     o.humidity = humidity;
     o.pressure = pressure;

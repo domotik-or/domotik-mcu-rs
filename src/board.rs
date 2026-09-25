@@ -63,7 +63,7 @@ pub struct Board {
     pub buf_usart1: BufferedUart<'static>,
     pub buf_usart2: BufferedUart<'static>,
 
-    pub i2c_dev: I2c<'static, Async, I2cMaster>,
+    pub _i2c_dev: I2c<'static, Async, I2cMaster>,
     pub spi_dev: SpiPeripheral,
 
     pub cs_w5500: Output<'static>,
@@ -139,7 +139,7 @@ impl Board {
         Self {
             buf_usart1,
             buf_usart2,
-            i2c_dev,
+            _i2c_dev: i2c_dev,
             spi_dev,
             cs_w5500,
             int_w5500,
