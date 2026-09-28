@@ -89,4 +89,63 @@ impl HttpRequests {
 
         Ok(timestamp)
     }
+
+    pub async fn get_path(&self, path: core::fmt::Arguments<'_>) -> Result<u64, ()> {
+        let mut url: String<256> = String::new();
+
+        write!(&mut url, "{}/", API_URL).map_err(|_| ())?;
+
+        url.write_fmt(path).map_err(|_| ())?;
+
+        let _guard = HTTP_LOCK.lock().await;
+
+        let mut buffer = [0u8; 1024];
+
+        let mut http_client = HttpClient::new(self.tcp, self.dns);
+
+        let mut req = match http_client.request(Method::GET, &url).await {
+            Ok(req) => req,
+
+            Err(e) => {
+                #[cfg(feature = "defmt")]
+                error!("request error: {:?}", Debug2Format(&e));
+
+                return Err(());
+            }
+        };
+
+        let resp = match req.send(&mut buffer).await {
+            Ok(resp) => resp,
+
+            Err(e) => {
+                #[cfg(feature = "defmt")]
+                error!("send error: {:?}", Debug2Format(&e));
+
+                return Err(());
+            }
+        };
+
+        #[cfg(feature = "defmt")]
+        info!("HTTP status: {}", resp.status.0);
+
+        if resp.status.0 != 200 {
+            return Err(());
+        }
+
+        // Consume resp and read the complete response body.
+        let body = resp.body().read_to_end().await.map_err(|_| ())?;
+
+        // Convert the response bytes to text.
+        let text = core::str::from_utf8(body).map_err(|_| ())?;
+
+        // Convert the text to a Unix timestamp.
+        let timestamp = text.trim().parse::<u64>().map_err(|_| ())?;
+
+        {
+            let mut rtc = self.rtc.lock().await;
+            rtc.set_datetime(timestamp)?;
+        }
+
+        Ok(timestamp)
+    }
 }

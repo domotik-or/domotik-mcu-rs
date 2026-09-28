@@ -10,7 +10,7 @@ use crate::http_requests::HttpRequests;
 // }
 
 async fn send_linky_sinsts(http: &'static HttpRequests, sinsts: u16) -> Result<(), ()> {
-    if let Ok(timestamp) = http.get("sinsts", format_args!("value={}", sinsts)).await {
+    if let Ok(timestamp) = http.get_path(format_args!("set_sinsts/{}", sinsts)).await {
         #[cfg(feature = "defmt")]
         info!("timestamp: {}", timestamp);
     };
@@ -23,7 +23,7 @@ async fn send_outdoor(
     humidity: u16, pressure: u32, temperature: i16
 ) -> Result<(), ()>{
     if let Ok(timestamp) = http.get(
-        "outdoor",
+        "set_outdoor",
         format_args!(
             "temperature={}&humidity={}&pressure={}", temperature, humidity, pressure
         )

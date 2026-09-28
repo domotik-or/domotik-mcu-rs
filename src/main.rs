@@ -99,7 +99,7 @@ async fn main(spawner: Spawner) {
 
     let (sd_config, mut spi_dev) = match load_sd_config(spi_dev, board.cs_sd) {
         Ok(result) => {
-            board.led.set_low(); // ON = SD SUCCESS
+            // board.led.set_low(); // ON = SD SUCCESS
             result
         }
         Err(_) => {
@@ -137,6 +137,7 @@ async fn main(spawner: Spawner) {
 
     // default task
     loop {
-        Timer::after_secs(10).await;
+        board.led.toggle();
+        Timer::after_millis(500).await;
     }
 }

@@ -10,8 +10,8 @@ use embassy_stm32::{
 
 use crate::http_requests::HttpRequests;
 
-async fn send_ring(http: &'static HttpRequests) -> Result<(), ()>{
-    if let Ok(timestamp) = http.get("ring", format_args!("")).await {
+async fn send_event(http: &'static HttpRequests, event: &str) -> Result<(), ()>{
+    if let Ok(timestamp) = http.get_path(format_args!("set_event/{}", event)).await {
         #[cfg(feature = "defmt")]
         info!("timestamp: {}", timestamp);
     };
@@ -43,7 +43,7 @@ pub async fn task(
         #[cfg(feature = "defmt")]
         info!("Pulled!");
 
-        let _ = send_ring(http).await;
+        let _ = send_event(http, "ring").await;
 
         // ring the bell five times
         for _ in 1..=5 {

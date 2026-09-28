@@ -33,7 +33,7 @@ defmt-rtt = { version = "1.0.0", optional = true }
 my_libs = {path = "./my-libs"}
 
 [features]
-default = ["defmt"]
+default = []
 defmt = [
     "dep:defmt",
     "dep:defmt-rtt",
