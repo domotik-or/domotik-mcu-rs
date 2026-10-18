@@ -1,3 +1,6 @@
+#[cfg(feature = "defmt")]
+use defmt::debug;
+
 const KEYWORD_LEN: usize = 6;
 
 pub enum LinkyFrameError {
@@ -87,6 +90,8 @@ impl Linky {
                                 self.state = ReceptionState::ChecksumRead;
                             } else {
                                 self.state = ReceptionState::KeywordRead;
+                                self.checksum = 0;
+                                self.keyword_index = 0;
                             }
                         }
                     } else if c.is_ascii_digit() {
@@ -97,6 +102,8 @@ impl Linky {
                         self.data_size += 1;
                     } else {
                         self.state = ReceptionState::KeywordRead;
+                        self.checksum = 0;
+                        self.keyword_index = 0;
                     }
                 },
                 ReceptionState::ChecksumRead => {
@@ -107,12 +114,23 @@ impl Linky {
                                 if *frame == Frame::East {
                                     self.east = Some(self.data);
                                 } else {
+                                    if self.data <= 50{
+                                        #[cfg(feature = "defmt")]
+                                        debug!(
+                                            "SINSTS accepted: data={}, checksum calc={:#04x}, received={:#04x}",
+                                            self.data,
+                                            (self.checksum & 0x3f) + b' ',
+                                            *c,
+                                        );
+                                    }
                                     self.sinsts = Some(self.data.try_into().unwrap());
                                 }
                             }
                         }
                     }
                     self.state = ReceptionState::KeywordRead;
+                    self.checksum = 0;
+                    self.keyword_index = 0;
                 }
             }
         }

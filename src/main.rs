@@ -15,12 +15,17 @@ mod state;
 mod tic;
 mod utils;
 
+#[cfg(not(feature = "defmt"))]
+use panic_halt as _;
+
 #[cfg(feature = "defmt")]
-use defmt::*;
+use panic_probe as _;
+
 #[cfg(feature = "defmt")]
 use defmt_rtt as _;
-// Let panic_probe handle our panic routine
-use panic_probe as _;
+
+#[cfg(feature = "defmt")]
+use defmt::{debug, error, info, warn};
 
 use embassy_executor::Spawner;
 use embassy_net::{dns::DnsSocket, tcp::client::TcpClient};
@@ -131,7 +136,7 @@ async fn main(spawner: Spawner) {
 
     // Spawn tasks
     spawner.spawn(outdoor::task(board.buf_usart2).unwrap());
-    spawner.spawn(planner::task(&http).unwrap());
+    spawner.spawn(planner::task(&http, &rtc_clock).unwrap());
     spawner.spawn(ring::task(&http, board.button, board.bell).unwrap());
     spawner.spawn(tic::task(board.buf_usart1).unwrap());
 

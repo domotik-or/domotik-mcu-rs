@@ -47,9 +47,9 @@ impl HttpRequests {
         let mut req = match http_client.request(Method::GET, &url).await {
             Ok(req) => req,
 
-            Err(e) => {
+            Err(_e) => {
                 #[cfg(feature = "defmt")]
-                error!("request error: {:?}", Debug2Format(&e));
+                error!("request error: {:?}", Debug2Format(&_e));
 
                 return Err(());
             }
@@ -58,9 +58,9 @@ impl HttpRequests {
         let resp = match req.send(&mut buffer).await {
             Ok(resp) => resp,
 
-            Err(e) => {
+            Err(_e) => {
                 #[cfg(feature = "defmt")]
-                error!("send error: {:?}", Debug2Format(&e));
+                error!("send error: {:?}", Debug2Format(&_e));
 
                 return Err(());
             }
@@ -106,9 +106,9 @@ impl HttpRequests {
         let mut req = match http_client.request(Method::GET, &url).await {
             Ok(req) => req,
 
-            Err(e) => {
+            Err(_e) => {
                 #[cfg(feature = "defmt")]
-                error!("request error: {:?}", Debug2Format(&e));
+                error!("request error: {:?}", Debug2Format(&_e));
 
                 return Err(());
             }
@@ -117,9 +117,9 @@ impl HttpRequests {
         let resp = match req.send(&mut buffer).await {
             Ok(resp) => resp,
 
-            Err(e) => {
+            Err(_e) => {
                 #[cfg(feature = "defmt")]
-                error!("send error: {:?}", Debug2Format(&e));
+                error!("send error: {:?}", Debug2Format(&_e));
 
                 return Err(());
             }

@@ -2,7 +2,7 @@
 use defmt::*;
 
 use chrono::{DateTime, NaiveDateTime};
-use embassy_stm32::rtc::{Rtc, RtcTimeProvider};
+use embassy_stm32::rtc::{DateTime as RawDateTime, Rtc, RtcTimeProvider};
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
 
 const RTC_MAGIC: u32 = 0x5254_4321;
@@ -27,6 +27,17 @@ impl RtcClock {
             rtc,
             time_provider,
             needs_initialization
+        }
+    }
+
+    pub fn now(&self) -> Result<RawDateTime, ()> {
+        if self.is_initialized() {
+            // RTC -> embassy DateTime
+            let datetime = self.time_provider.now().map_err(|_| ())?;
+
+            Ok(datetime)
+        } else {
+            Err(())
         }
     }
 
