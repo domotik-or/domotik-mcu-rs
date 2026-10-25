@@ -1,5 +1,5 @@
 #[cfg(feature = "defmt")]
-use defmt::*;
+use defmt::debug;
 use embassy_executor::task;
 use embassy_stm32::usart::BufferedUart;
 use embedded_io_async::Read;
@@ -17,7 +17,6 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
         if let Ok(n) = buf_usart.read(&mut buf).await {
             if n != 0 {
                 for b in &mut buf[..n] { *b &= 0x7f; };
-                // info!("{}", &buf[..n]);
 
                 linky.decode_frame(&buf, n);
 
@@ -25,14 +24,14 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                     set_east(east).await;
 
                     #[cfg(feature = "defmt")]
-                    info!("east: {}", east);
+                    debug!("east: {}", east);
                 };
 
                 if let Some(sinsts) = linky.get_sinsts() {
                     set_sinsts(sinsts).await;
 
                     #[cfg(feature = "defmt")]
-                    info!("sinsts: {}", sinsts);
+                    debug!("sinsts: {}", sinsts);
                 };
             };
         };

@@ -1,5 +1,5 @@
 #[cfg(feature = "defmt")]
-use defmt::info;
+use defmt::{debug, error, info};
 use embassy_executor::task;
 use embassy_time::Timer;
 
@@ -10,12 +10,18 @@ use crate::rtc::SharedRtc;
 async fn send_linky_east(
     http: &'static HttpRequests, month: u8, year: u16, east: u32
 ) -> Result<(), ()> {
-    if let Ok(_timestamp) = http.get(
+    match http.get(
         "set_east",
-        format_args!("month={}&year={}&east={}", month, year, east)
+        format_args!("month={}&year={}&value={}", month, year, east)
     ).await {
-        #[cfg(feature = "defmt")]
-        info!("timestamp: {}", _timestamp);
+        Ok(timestamp) => {
+            #[cfg(feature = "defmt")]
+            debug!("timestamp: {}", timestamp);
+        },
+        Err(e) => {
+            #[cfg(feature = "defmt")]
+            error!("error: {}", e);
+        }
     };
 
     Ok(())
@@ -24,7 +30,7 @@ async fn send_linky_east(
 async fn send_linky_sinsts(http: &'static HttpRequests, sinsts: u16) -> Result<(), ()> {
     if let Ok(_timestamp) = http.get_path(format_args!("set_sinsts/{}", sinsts)).await {
         #[cfg(feature = "defmt")]
-        info!("timestamp: {}", _timestamp);
+        debug!("timestamp: {}", _timestamp);
     };
 
     Ok(())
@@ -34,14 +40,20 @@ async fn send_outdoor(
     http: &'static HttpRequests,
     humidity: u16, pressure: u32, temperature: i16
 ) -> Result<(), ()>{
-    if let Ok(_timestamp) = http.get(
+    match http.get(
         "set_outdoor",
         format_args!(
             "temperature={}&humidity={}&pressure={}", temperature, humidity, pressure
         )
     ).await {
-        #[cfg(feature = "defmt")]
-        info!("timestamp: {}", _timestamp);
+        Ok(timestamp) => {
+            #[cfg(feature = "defmt")]
+            debug!("timestamp: {}", timestamp);
+        },
+        Err(e) => {
+            #[cfg(feature = "defmt")]
+            error!("error: {}", e);
+        }
     };
 
     Ok(())
@@ -65,13 +77,21 @@ pub async fn task(http: &'static HttpRequests, rtc: &'static SharedRtc) {
         if let Ok(now) = now {
             let month = now.month();
             if last_month != month {
-                if let Ok(_) = send_linky_east(http, month, now.year(), linky.east).await {
+                let year = now.year();
+
+                #[cfg(feature = "defmt")]
+                info!("sending east {}/{}", month, year);
+
+                if let Ok(_) = send_linky_east(http, month, year, linky.east).await {
                     last_month = month;
                 };
             };
         };
 
         sinsts_sent |= if linky.sinsts.abs_diff(sinsts_old) >= 20 {
+            #[cfg(feature = "defmt")]
+            info!("sending sinsts (difference): {}", linky.sinsts);
+
             let _ = send_linky_sinsts(http, linky.sinsts).await;
             sinsts_old = linky.sinsts;
             true
@@ -87,6 +107,9 @@ pub async fn task(http: &'static HttpRequests, rtc: &'static SharedRtc) {
             if sinsts_sent {
                 sinsts_sent = false;
             } else {
+                #[cfg(feature = "defmt")]
+                info!("sending sinsts (periodical): {}", linky.sinsts);
+
                 let _ = send_linky_sinsts(http, linky.sinsts).await;
                 sinsts_old = linky.sinsts;
             }

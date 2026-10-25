@@ -1,6 +1,6 @@
 use cortex_m;
 #[cfg(feature = "defmt")]
-use defmt::*;
+use defmt::{Format, info};
 use embedded_hal::digital::OutputPin;
 use embedded_hal::spi::SpiBus;
 

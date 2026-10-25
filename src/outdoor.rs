@@ -1,5 +1,5 @@
 #[cfg(feature = "defmt")]
-use defmt::*;
+use defmt::debug;
 use embassy_executor::task;
 use embassy_stm32::usart::BufferedUart;
 use embedded_io_async::Read;
@@ -45,7 +45,7 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                         ) + 0x20;
 
                         if checksum == received_checksum {
-                            // info!("valid: {}", &frame[..len - 3]);
+                            // debug!("valid: {}", &frame[..len - 3]);
 
                             let temperature = if frame[0] == b'-' {
                                 let temperature = -frame[1..5].iter().fold(0i16, |n, &b| n * 10 + (b - b'0') as i16);
@@ -62,10 +62,10 @@ pub async fn task(mut buf_usart: BufferedUart<'static>) {
                             set_outdoor(humidity, temperature, pressure).await;
 
                             #[cfg(feature = "defmt")]
-                            info!("temperature: {}, humidity: {}, pressure: {}", temperature, humidity, pressure);
+                            debug!("temperature: {}, humidity: {}, pressure: {}", temperature, humidity, pressure);
                         } else {
                             #[cfg(feature = "defmt")]
-                            info!(
+                            debug!(
                                 "bad checksum: received={} calculated={}",
                                 received_checksum,
                                 checksum

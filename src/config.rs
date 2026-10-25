@@ -1,7 +1,7 @@
 use embassy_net::Ipv4Address;
 use crc32fast::Hasher;
 #[cfg(feature = "defmt")]
-use defmt::*;
+use defmt::{Format, info};
 
 #[derive(Debug)]
 pub enum ConfigError {

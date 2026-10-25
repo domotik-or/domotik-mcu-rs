@@ -1,5 +1,5 @@
 #[cfg(feature = "defmt")]
-use defmt::*;
+use defmt::info;
 
 use chrono::{DateTime, NaiveDateTime};
 use embassy_stm32::rtc::{DateTime as RawDateTime, Rtc, RtcTimeProvider};

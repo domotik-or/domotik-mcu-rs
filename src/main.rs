@@ -94,11 +94,7 @@ async fn main(spawner: Spawner) {
 
     let mut spi_dev = board.spi_dev;
 
-    #[cfg(feature = "defmt")]
-    info!("before 2s delay");
-    Timer::after_secs(2).await;
-    #[cfg(feature = "defmt")]
-    info!("after 2s delay");
+    Timer::after_secs(1).await;
 
     configure_sd(&mut spi_dev);
 
@@ -130,6 +126,8 @@ async fn main(spawner: Spawner) {
     let tcp_client: &'static TcpClient<'static, 1, 1024, 1024> = TCP_CLIENT.init(tcp_client);
     let dns_client: &'static DnsSocket<'static> = DNS_CLIENT.init(dns_client);
     let http: &'static HttpRequests = HTTP.init(HttpRequests::new(tcp_client, dns_client, rtc_clock));
+
+    Timer::after_secs(5).await;
 
     #[cfg(feature = "defmt")]
     info!("Application ready");

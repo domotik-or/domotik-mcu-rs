@@ -1,5 +1,5 @@
 #[cfg(feature = "defmt")]
-use defmt::*;
+use defmt::debug;
 use embassy_executor::task;
 use embassy_time::{Duration, Timer};
 use embassy_stm32::{
@@ -13,7 +13,7 @@ use crate::http_requests::HttpRequests;
 async fn send_event(http: &'static HttpRequests, event: &str) -> Result<(), ()>{
     if let Ok(timestamp) = http.get_path(format_args!("set_event/{}", event)).await {
         #[cfg(feature = "defmt")]
-        info!("timestamp: {}", timestamp);
+        debug!("timestamp: {}", timestamp);
     };
 
     Ok(())
@@ -41,7 +41,7 @@ pub async fn task(
     loop {
         wait_button_pressed(&mut button).await;
         #[cfg(feature = "defmt")]
-        info!("Pulled!");
+        debug!("Pulled!");
 
         let _ = send_event(http, "ring").await;
 
