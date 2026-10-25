@@ -6,6 +6,9 @@
 pub mod chip;
 mod device;
 
+#[cfg(feature = "defmt")]
+use defmt::{debug, error, info, warn};
+
 use embassy_futures::select::{Either3, select3};
 use embassy_net_driver_channel as ch;
 use embassy_net_driver_channel::driver::LinkState;
@@ -63,6 +66,7 @@ impl<'d, C: Chip, SPI: SpiDevice, INT: Wait, RST: OutputPin> Runner<'d, C, SPI, 
     pub async fn run(mut self) -> ! {
         let (state_chan, mut rx_chan, mut tx_chan) = self.ch.split();
         let mut tick = Ticker::every(Duration::from_millis(500));
+        let mut spi_errors = 0u32;
         loop {
             match select3(
                 async {
@@ -97,10 +101,14 @@ impl<'d, C: Chip, SPI: SpiDevice, INT: Wait, RST: OutputPin> Runner<'d, C, SPI, 
                     tx_chan.tx_done();
                 }
                 Either3::Third(()) => {
-                    if self.mac.is_link_up().await {
-                        state_chan.set_link_state(LinkState::Up);
-                    } else {
-                        state_chan.set_link_state(LinkState::Down);
+                    match self.mac.is_link_up().await {
+                        Ok(true) => state_chan.set_link_state(LinkState::Up),
+                        Ok(false) => state_chan.set_link_state(LinkState::Down),
+                        Err(_) => {
+                            spi_errors += 1;
+                            #[cfg(feature = "defmt")]
+                            defmt::warn!("W5500 PHY read error: {}", spi_errors);
+                        }
                     }
                 }
             }

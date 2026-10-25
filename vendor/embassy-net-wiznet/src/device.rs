@@ -247,9 +247,9 @@ impl<C: Chip, SPI: SpiDevice> WiznetDevice<C, SPI> {
         Ok(frame.len())
     }
 
-    pub async fn is_link_up(&mut self) -> bool {
+    pub async fn is_link_up(&mut self) -> Result<bool, SPI::Error> {
         let mut link = [0];
-        self.bus_read(C::COMMON_PHY_CFG, &mut link).await.ok();
-        link[0] & 1 == 1
+        self.bus_read(C::COMMON_PHY_CFG, &mut link).await?;
+        Ok(link[0] & 1 != 0)
     }
 }
